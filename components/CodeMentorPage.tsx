@@ -41,7 +41,7 @@ const CodeMentorPage: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
             setChallenge(result);
             setPhase('challenge');
         } catch (err) {
-            setError('Failed to generate a challenge. Please try again.');
+            setError((err as Error).message);
         } finally {
             setIsLoadingChallenge(false);
         }
@@ -55,7 +55,7 @@ const CodeMentorPage: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
             const result = await getCodeHint(challenge, userCode, language);
             setHint(result);
         } catch (err) {
-            setError('Failed to get a hint.');
+            setError((err as Error).message);
         } finally {
             setIsLoadingHint(false);
         }
@@ -71,7 +71,7 @@ const CodeMentorPage: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
             setFeedback(result);
             setPhase('feedback');
         } catch (err) {
-            setError('Failed to evaluate the solution.');
+            setError((err as Error).message);
         } finally {
             setIsLoadingFeedback(false);
         }

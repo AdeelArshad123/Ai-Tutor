@@ -18,7 +18,7 @@ const proModel = 'gemini-2.5-pro';
 const md = new MarkdownIt();
 
 const handleMissingApiKeyError = (type: 'html' | 'json' | 'stream' | 'text') => {
-    const errorMessage = "AI features are unavailable because the API key is not configured. Please contact the site administrator.";
+    const errorMessage = "AI features are unavailable because the API_KEY environment variable is not configured. If you are deploying this project, please add it to your environment variables.";
     switch(type) {
         case 'html':
             return md.render(`## Error\n\n${errorMessage}`);

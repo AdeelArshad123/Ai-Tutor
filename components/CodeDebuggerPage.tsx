@@ -24,7 +24,7 @@ const CodeDebuggerPage: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
             const response = await debugCode(code, language);
             setResult(response);
         } catch (err) {
-            setError('An error occurred while debugging. Please try again.');
+            setError((err as Error).message);
         } finally {
             setIsLoading(false);
         }

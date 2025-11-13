@@ -51,7 +51,7 @@ const UnitTestGeneratorPage: React.FC<{ onBack: () => void; }> = ({ onBack }) =>
             const result = await generateUnitTests(sourceCode, language, framework);
             setGeneratedTests(result);
         } catch (err) {
-            setError('An error occurred while generating tests. Please try again.');
+            setError((err as Error).message);
         } finally {
             setIsLoading(false);
         }

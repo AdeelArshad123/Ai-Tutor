@@ -33,7 +33,7 @@ const QuizGeneratorPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             const response = await generateQuizFromTopicText(topicText);
             setQuiz(response);
         } catch (err) {
-            setError('An error occurred while generating the quiz. The AI might have returned an invalid format. Please try again.');
+            setError((err as Error).message);
         } finally {
             setIsLoading(false);
         }

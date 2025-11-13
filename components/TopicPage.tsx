@@ -57,6 +57,7 @@ const TopicPage: React.FC<TopicPageProps> = ({ topic, language, onBack, user }) 
   const [isLoadingAi, setIsLoadingAi] = useState(false);
   const [quiz, setQuiz] = useState<QuizType | null>(null);
   const [isLoadingQuiz, setIsLoadingQuiz] = useState(false);
+  const [quizError, setQuizError] = useState('');
   const [activeExercise, setActiveExercise] = useState<Exercise | null>(topic.exercises?.[0] || null);
   const [userCode, setUserCode] = useState(activeExercise?.starterCode || '');
   const [testResults, setTestResults] = useState<any[]>([]);
@@ -94,11 +95,12 @@ const TopicPage: React.FC<TopicPageProps> = ({ topic, language, onBack, user }) 
   const handleGenerateQuiz = async () => {
       setIsLoadingQuiz(true);
       setQuiz(null);
+      setQuizError('');
       try {
           const generatedQuiz = await generateQuiz(topic.title, topic.longDescription);
           setQuiz(generatedQuiz);
       } catch(e) {
-          console.error("Quiz generation failed", e);
+          setQuizError((e as Error).message);
       }
       setIsLoadingQuiz(false);
   };
@@ -223,6 +225,7 @@ const TopicPage: React.FC<TopicPageProps> = ({ topic, language, onBack, user }) 
                         <SparklesIcon className="w-5 h-5 inline-block mr-2" /> Generate Quiz
                      </button>
                  )}
+                 {quizError && <p className="text-red-500 dark:text-red-400 mt-2 text-sm">{quizError}</p>}
              </div>
 
         </div>

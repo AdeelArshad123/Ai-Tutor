@@ -33,7 +33,7 @@ const CodeImproverPage: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
             const response = await improveCode(code, language);
             setResult(response);
         } catch (err) {
-            setError('An error occurred while improving the code. Please try again.');
+            setError((err as Error).message);
         } finally {
             setIsLoading(false);
         }

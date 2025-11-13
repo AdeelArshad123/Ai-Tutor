@@ -68,8 +68,7 @@ const UIDrafterPage: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
             const result = await generateUiFromImage(imageFile, prompt);
             setGeneratedCode(result);
         } catch (err) {
-            setError('An error occurred generating the UI. The model may not have been able to process the image. Please try again.');
-            console.error(err);
+            setError((err as Error).message);
         } finally {
             setIsLoading(false);
         }

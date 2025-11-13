@@ -26,7 +26,7 @@ const LearningPathPage: React.FC<{
             const response = await generateLearningPath(goal);
             setPath(response);
         } catch (err) {
-            setError('An error occurred while generating the path. Please try a different prompt.');
+            setError((err as Error).message);
         } finally {
             setIsLoading(false);
         }

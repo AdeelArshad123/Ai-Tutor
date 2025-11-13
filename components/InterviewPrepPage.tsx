@@ -44,7 +44,7 @@ const InterviewPrepPage: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
             const q = await getInterviewQuestion(technology);
             setQuestion(q);
         } catch (err) {
-            setError('Failed to generate a question. Please try again.');
+            setError((err as Error).message);
         } finally {
             setIsLoadingQuestion(false);
         }
@@ -59,7 +59,7 @@ const InterviewPrepPage: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
             const fb = await evaluateInterviewAttempt(question.question, userCode, userExplanation);
             setFeedback(fb);
         } catch(err) {
-            setError('Failed to get feedback. Please try again.');
+            setError((err as Error).message);
         } finally {
             setIsEvaluating(false);
         }

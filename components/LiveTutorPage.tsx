@@ -92,7 +92,7 @@ const LiveTutorPage: React.FC<{ onBack: () => void; user: User; }> = ({ onBack, 
         if (status === 'connected' || status === 'connecting') return;
         
         if (!process.env.API_KEY) {
-            setError("API Key is not configured. Live tutor is unavailable.");
+            setError("API Key is not configured. To use the live tutor, please set the API_KEY environment variable in your deployment settings.");
             setStatus('error');
             return;
         }
