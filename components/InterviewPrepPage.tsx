@@ -1,137 +1,150 @@
 import React, { useState } from 'react';
 import { getInterviewQuestion, evaluateInterviewAttempt } from '../services/geminiService';
 import { InterviewQuestion } from '../types';
-import { learningData } from '../constants';
-
-const availableLanguages = Array.from(new Set(learningData.flatMap(category => category.languages.map(lang => lang.name))));
-
-type Stage = 'start' | 'question' | 'feedback';
+import { SparklesIcon, MicIcon } from './icons';
+import { techStack } from '../constants';
+import CodeEditor from './CodeEditor';
 
 const InterviewPrepPage: React.FC<{ onBack: () => void; }> = ({ onBack }) => {
-    const [stage, setStage] = useState<Stage>('start');
-    const [language, setLanguage] = useState(availableLanguages[0]);
+    const [technology, setTechnology] = useState('JavaScript');
     const [question, setQuestion] = useState<InterviewQuestion | null>(null);
     const [userCode, setUserCode] = useState('');
     const [userExplanation, setUserExplanation] = useState('');
     const [feedback, setFeedback] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoadingQuestion, setIsLoadingQuestion] = useState(false);
+    const [isEvaluating, setIsEvaluating] = useState(false);
     const [error, setError] = useState('');
 
-    const handleStartInterview = async () => {
-        setIsLoading(true);
-        setError('');
+    const interviewTechnologies = [
+        { id: 'javascript', name: 'JavaScript' },
+        { id: 'typescript', name: 'TypeScript' },
+        { id: 'react', name: 'React' },
+        { id: 'html', name: 'HTML' },
+        { id: 'css', name: 'CSS' },
+        ...techStack.languages,
+        { id: 'dsa', name: 'Data Structures & Algorithms' },
+        { id: 'sql', name: 'SQL' },
+        { id: 'system-design', name: 'System Design' }
+    ];
+
+    // Remove duplicates by name to ensure a clean list
+    const uniqueTechnologies = interviewTechnologies.filter((tech, index, self) =>
+        index === self.findIndex((t) => t.name === tech.name)
+    );
+
+
+    const handleGetQuestion = async () => {
+        setIsLoadingQuestion(true);
         setQuestion(null);
-        try {
-            const result = await getInterviewQuestion(language);
-            if (result) {
-                setQuestion(result);
-                setStage('question');
-            } else {
-                setError('Could not generate a question. Please try again.');
-            }
-        } catch (e) {
-            setError('An error occurred. Please try again.');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-    
-    const handleSubmitAttempt = async () => {
-        if (!userCode.trim() || !userExplanation.trim()) {
-            setError('Please provide both a code solution and an explanation.');
-            return;
-        }
-        setIsLoading(true);
-        setError('');
         setFeedback('');
-        try {
-            const result = await evaluateInterviewAttempt(question!.question, userCode, userExplanation);
-            setFeedback(result);
-            setStage('feedback');
-        } catch (e) {
-            setError('An error occurred while evaluating your attempt.');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-    
-    const handleTryAgain = () => {
-        setStage('start');
-        setQuestion(null);
         setUserCode('');
         setUserExplanation('');
-        setFeedback('');
+        setError('');
+        try {
+            const q = await getInterviewQuestion(technology);
+            setQuestion(q);
+        } catch (err) {
+            setError('Failed to generate a question. Please try again.');
+        } finally {
+            setIsLoadingQuestion(false);
+        }
     };
+    
+    const handleEvaluate = async () => {
+        if (!userCode.trim() || !userExplanation.trim() || !question) return;
+        setIsEvaluating(true);
+        setFeedback('');
+        setError('');
+        try {
+            const fb = await evaluateInterviewAttempt(question.question, userCode, userExplanation);
+            setFeedback(fb);
+        } catch(err) {
+            setError('Failed to get feedback. Please try again.');
+        } finally {
+            setIsEvaluating(false);
+        }
+    }
 
     return (
         <div>
-            <button onClick={onBack} className="mb-6 bg-white/10 text-white py-2 px-4 rounded-lg hover:bg-white/20 transition-colors">
+            <button onClick={onBack} className="mb-6 bg-gray-200 dark:bg-gray-800 text-black dark:text-white py-2 px-4 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors">
                 &larr; Back to Home
             </button>
-             <div className="text-center mb-8">
-                <h1 className="text-4xl font-bold">AI Interview Simulator</h1>
-                <p className="text-slate-400 mt-2">Practice a technical interview and get instant feedback.</p>
+            <div className="text-center">
+                <h1 className="text-4xl font-bold">Interview Simulator</h1>
+                <p className="text-gray-600 dark:text-gray-400 mt-2 max-w-2xl mx-auto">
+                    Practice for your next technical interview. Get a random question, code a solution, explain your approach, and receive instant AI-powered feedback.
+                </p>
             </div>
-            
-            <div className="max-w-4xl mx-auto bg-black/20 backdrop-blur-xl p-8 rounded-2xl shadow-lg border border-white/10">
-                {stage === 'start' && (
-                    <div className="text-center">
-                        <h2 className="text-2xl font-semibold mb-4 text-cyan-400">Ready to start?</h2>
-                        <div className="mb-6">
-                            <label htmlFor="language-select" className="block text-sm font-medium text-slate-300 mb-1">Select your language/framework</label>
+
+            <div className="max-w-4xl mx-auto mt-8 space-y-8">
+                {/* Step 1: Get Question */}
+                <div className="bg-white dark:bg-gray-900/70 p-6 rounded-2xl border border-gray-200 dark:border-gray-700">
+                    <h2 className="text-xl font-bold">Step 1: Choose Your Technology</h2>
+                    <div className="flex items-end gap-4 mt-4">
+                        <div className="flex-grow">
+                            <label htmlFor="technology" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                Technology
+                            </label>
                             <select
-                                id="language-select"
-                                value={language}
-                                onChange={(e) => setLanguage(e.target.value)}
-                                className="mt-1 max-w-xs mx-auto block w-full bg-black/20 border border-white/10 rounded-md py-2 px-3 text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 sm:text-sm"
+                                id="technology"
+                                value={technology}
+                                onChange={(e) => setTechnology(e.target.value)}
+                                className="w-full bg-gray-100 dark:bg-black/30 border border-gray-300 dark:border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-white"
                             >
-                                {availableLanguages.map(lang => (
-                                    <option key={lang} value={lang}>{lang}</option>
+                                {uniqueTechnologies.map(tech => (
+                                    <option key={tech.id} value={tech.name}>{tech.name}</option>
                                 ))}
                             </select>
                         </div>
-                        <button onClick={handleStartInterview} disabled={isLoading} className="w-full max-w-xs mx-auto flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 disabled:opacity-50">
-                             {isLoading ? 'Getting Question...' : `Start ${language} Interview`}
+                        <button
+                            onClick={handleGetQuestion}
+                            disabled={isLoadingQuestion}
+                            className="flex items-center justify-center gap-2 bg-black dark:bg-white text-white dark:text-black font-semibold py-2 px-4 rounded-lg transition-all hover:bg-gray-800 dark:hover:bg-gray-200 disabled:opacity-50"
+                        >
+                            {isLoadingQuestion ? 'Generating...' : (<><MicIcon className="w-5 h-5" /> Get Question</>)}
                         </button>
-                        {error && <p className="text-red-400 mt-4">{error}</p>}
+                    </div>
+                </div>
+
+                {/* Step 2: Answer Question */}
+                {question && (
+                    <div className="bg-white dark:bg-gray-900/70 p-6 rounded-2xl border border-gray-200 dark:border-gray-700">
+                        <h2 className="text-xl font-bold">Step 2: Solve the Problem</h2>
+                        <div className="mt-4 p-4 bg-gray-100 dark:bg-black/30 rounded-lg">
+                             <h3 className="font-bold text-lg text-black dark:text-white">{question.question}</h3>
+                             <p className="mt-2 text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{question.instructions}</p>
+                        </div>
+                        <div className="mt-4">
+                            <label htmlFor="userCode" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Your Code</label>
+                            <div className="w-full border border-gray-300 dark:border-gray-700 rounded-md overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-white">
+                                <CodeEditor
+                                    value={userCode}
+                                    onChange={setUserCode}
+                                    language={technology.toLowerCase()}
+                                    height="250px"
+                                />
+                            </div>
+                        </div>
+                         <div className="mt-4">
+                            <label htmlFor="userExplanation" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Your Explanation</label>
+                            <textarea id="userExplanation" value={userExplanation} onChange={e => setUserExplanation(e.target.value)} rows={4} placeholder="Explain your approach, time/space complexity, and any trade-offs." className="w-full bg-gray-100 dark:bg-black/30 border border-gray-300 dark:border-gray-600 rounded-md py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-white" />
+                        </div>
+                        <button onClick={handleEvaluate} disabled={isEvaluating || !userCode.trim() || !userExplanation.trim()} className="mt-4 w-full flex items-center justify-center gap-2 bg-black dark:bg-white text-white dark:text-black font-semibold py-2.5 px-4 rounded-lg transition-all hover:bg-gray-800 dark:hover:bg-gray-200 disabled:opacity-50">
+                            {isEvaluating ? 'Evaluating...' : (<><SparklesIcon className="w-5 h-5" /> Get Feedback</>)}
+                        </button>
                     </div>
                 )}
                 
-                {stage === 'question' && question && (
-                    <div>
-                        <h2 className="text-2xl font-semibold mb-2 text-cyan-400">Your Question</h2>
-                        <p className="text-lg font-bold mb-2">{question.question}</p>
-                        <p className="text-slate-400 mb-6">{question.instructions}</p>
-
-                        <div className="space-y-6">
-                            <div>
-                                <label htmlFor="code-input" className="block text-sm font-medium text-slate-300 mb-1">Your Code Solution</label>
-                                <textarea id="code-input" rows={12} value={userCode} onChange={(e) => setUserCode(e.target.value)} className="w-full bg-black/20 border border-white/10 rounded-md p-2 font-mono text-sm" />
-                            </div>
-                             <div>
-                                <label htmlFor="explanation-input" className="block text-sm font-medium text-slate-300 mb-1">Explain your thought process</label>
-                                <textarea id="explanation-input" rows={4} value={userExplanation} onChange={(e) => setUserExplanation(e.target.value)} className="w-full bg-black/20 border border-white/10 rounded-md p-2" />
-                            </div>
-                        </div>
-                        <button onClick={handleSubmitAttempt} disabled={isLoading} className="mt-6 w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-500 disabled:opacity-50">
-                           {isLoading ? 'Evaluating...' : 'Submit for Feedback'}
-                        </button>
-                         {error && <p className="text-red-400 mt-4">{error}</p>}
+                {/* Step 3: Feedback */}
+                {feedback && (
+                    <div className="bg-white dark:bg-gray-900/70 p-6 rounded-2xl border border-gray-200 dark:border-gray-700">
+                        <h2 className="text-xl font-bold">Step 3: AI Feedback</h2>
+                        <div className="mt-4 prose dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: feedback }}/>
                     </div>
                 )}
-
-                {stage === 'feedback' && (
-                    <div>
-                        <h2 className="text-2xl font-semibold mb-4 text-cyan-400">Interviewer Feedback</h2>
-                         <div
-                            className="prose prose-invert max-w-none prose-h4:text-cyan-400 prose-pre:bg-black/30 prose-pre:border prose-pre:border-white/10 prose-code:text-white"
-                            dangerouslySetInnerHTML={{ __html: feedback }}
-                        />
-                        <button onClick={handleTryAgain} className="mt-6 w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500">
-                           Try another question
-                        </button>
-                    </div>
-                )}
+                
+                {error && <p className="text-red-500 dark:text-red-400 text-center">{error}</p>}
             </div>
         </div>
     );

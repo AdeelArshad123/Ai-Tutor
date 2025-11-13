@@ -1,6 +1,6 @@
 import { User } from '../types';
 
-const USER_KEY = 'stacktutor_user';
+const AUTH_SESSION_KEY = 'stacktutor_auth_session';
 
 // In a real app, you'd have a user database. We'll simulate it here.
 const getSimulatedUserDatabase = () => {
@@ -20,7 +20,7 @@ export const signupUser = (username: string, password_not_used: string): User | 
     db[username] = { username }; // In a real app, you'd store a hashed password
     saveSimulatedUserDatabase(db);
     const user: User = { username };
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(user));
     return user;
 }
 
@@ -30,19 +30,19 @@ export const loginUser = (username: string, password_not_used: string): User | n
     // In a real app, you'd check the password hash
     if (db[username]) {
         const user: User = { username };
-        localStorage.setItem(USER_KEY, JSON.stringify(user));
+        localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(user));
         return user;
     }
     return null; // User not found
 };
 
 export const logoutUser = () => {
-  localStorage.removeItem(USER_KEY);
+  localStorage.removeItem(AUTH_SESSION_KEY);
 };
 
 export const getCurrentUser = (): User | null => {
   try {
-    const user = localStorage.getItem(USER_KEY);
+    const user = localStorage.getItem(AUTH_SESSION_KEY);
     return user ? JSON.parse(user) : null;
   } catch (error) {
     console.error("Failed to parse user from localStorage", error);

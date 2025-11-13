@@ -1,3 +1,5 @@
+import { LearningCategory, Language, Topic } from '../types';
+
 const getProgressKey = (username: string) => `stacktutor_progress_${username}`;
 
 interface Progress {
@@ -52,3 +54,32 @@ export const getLanguageProgress = (username: string, languageSlug: string, tota
     if (totalTopics === 0) return 0;
     return Math.round((completedTopics / totalTopics) * 100);
 }
+
+export const getResumeLink = (username: string, learningData: LearningCategory[]): { language: Language, topic: Topic } | null => {
+  if (!username) return null;
+
+  const progress = getProgress(username);
+  const startedLanguages = learningData.flatMap(cat => cat.languages).filter(lang => isLanguageStarted(username, lang.slug));
+
+  // Prioritize started languages
+  for (const lang of startedLanguages) {
+      const langProgress = progress[lang.slug];
+      for (const topic of lang.topics) {
+          if (!langProgress[topic.slug]) {
+              return { language: lang, topic: topic }; // Next topic in an active language
+          }
+      }
+  }
+
+  // If no started languages or all started are complete, suggest the very first topic overall
+  if (learningData.length > 0 && learningData[0].languages.length > 0 && learningData[0].languages[0].topics.length > 0) {
+      const firstLang = learningData[0].languages[0];
+      const firstTopic = firstLang.topics[0];
+      // Only suggest this if the user hasn't started anything yet
+      if (Object.keys(progress).length === 0) {
+        return { language: firstLang, topic: firstTopic };
+      }
+  }
+
+  return null; // User has completed everything or there's no data
+};

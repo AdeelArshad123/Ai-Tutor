@@ -7,6 +7,14 @@ interface SignupPageProps {
     onNavigateToLogin: () => void;
 }
 
+const styles = {
+    card: "bg-white dark:bg-black/50 backdrop-blur-xl border border-gray-300 dark:border-gray-700",
+    title: "text-black dark:text-white",
+    input: "bg-gray-100 dark:bg-gray-900 border-gray-300 dark:border-gray-700 focus:border-blue-500 dark:focus:border-white focus:ring-blue-500 dark:focus:ring-white text-black dark:text-white placeholder-gray-500",
+    button: "bg-black dark:bg-white text-white dark:text-black hover:bg-gray-800 dark:hover:bg-gray-200 transition-all duration-300 active:scale-[0.98]",
+    link: "text-blue-600 dark:text-white hover:underline",
+};
+
 const SignupPage: React.FC<SignupPageProps> = ({ onSignupSuccess, onNavigateToLogin }) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -16,15 +24,13 @@ const SignupPage: React.FC<SignupPageProps> = ({ onSignupSuccess, onNavigateToLo
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
-        setIsLoading(true);
         
         if (username.length < 3) {
             setError('Username must be at least 3 characters long.');
-            setIsLoading(false);
             return;
         }
-
-        // Simulate API call
+        
+        setIsLoading(true);
         setTimeout(() => {
             const user = signupUser(username, password);
             setIsLoading(false);
@@ -37,49 +43,52 @@ const SignupPage: React.FC<SignupPageProps> = ({ onSignupSuccess, onNavigateToLo
     };
 
     return (
-        <div className="flex items-center justify-center h-full">
-            <div className="w-full max-w-md bg-black/20 backdrop-blur-xl p-8 rounded-2xl shadow-lg border border-white/10">
-                <h1 className="text-3xl font-bold text-center mb-2 text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-fuchsia-500">
-                    Create Account
-                </h1>
-                <p className="text-center text-slate-400 mb-6">Join StackTutor to start learning!</p>
-                <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="flex-grow flex items-center justify-center p-4">
+             <div className={`relative w-full max-w-md rounded-2xl p-8 md:p-10 ${styles.card}`}>
+                <div className="text-center mb-8">
+                     <h1 className={`text-4xl font-bold ${styles.title}`}>StackTutor</h1>
+                     <p className="mt-4 text-2xl font-semibold text-gray-900 dark:text-white">Create Your Account</p>
+                     <p className="mt-2 text-base text-gray-600 dark:text-gray-400">Join to start your learning adventure.</p>
+                </div>
+                
+                <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                        <label htmlFor="username"  className="block text-sm font-medium text-slate-300">Username</label>
+                        <label htmlFor="username"  className="block text-sm font-medium text-gray-700 dark:text-gray-300">Username</label>
                         <input
                             id="username"
                             type="text"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             required
-                            className="mt-1 block w-full bg-black/20 border border-white/10 rounded-md py-2 px-3 text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 sm:text-sm"
+                            className={`mt-1 block w-full border rounded-md py-2 px-3 shadow-sm focus:outline-none focus:ring-2 sm:text-sm transition-colors duration-300 ${styles.input}`}
                         />
                     </div>
                     <div>
-                        <label htmlFor="password"  className="block text-sm font-medium text-slate-300">Password</label>
+                        <label htmlFor="password"  className="block text-sm font-medium text-gray-700 dark:text-gray-300">Password</label>
                         <input
                             id="password"
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             required
-                            className="mt-1 block w-full bg-black/20 border border-white/10 rounded-md py-2 px-3 text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 sm:text-sm"
+                            className={`mt-1 block w-full border rounded-md py-2 px-3 shadow-sm focus:outline-none focus:ring-2 sm:text-sm transition-colors duration-300 ${styles.input}`}
                         />
                     </div>
-                    {error && <p className="text-red-400 text-sm">{error}</p>}
+                    {error && <p className="text-red-500 dark:text-red-400 text-sm">{error}</p>}
                     <div>
                         <button
                             type="submit"
                             disabled={isLoading}
-                            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 disabled:opacity-50"
+                            className={`w-full flex justify-center mt-2 py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 ${styles.button}`}
                         >
                             {isLoading ? 'Creating account...' : 'Sign Up'}
                         </button>
                     </div>
                 </form>
-                 <p className="mt-6 text-center text-sm text-slate-400">
+
+                <p className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
                     Already have an account?{' '}
-                    <button onClick={onNavigateToLogin} className="font-medium text-cyan-400 hover:text-cyan-300">
+                    <button onClick={onNavigateToLogin} className={`font-medium ${styles.link}`}>
                         Log in
                     </button>
                 </p>

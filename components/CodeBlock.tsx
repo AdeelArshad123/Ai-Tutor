@@ -1,71 +1,60 @@
 import React, { useState } from 'react';
-import { CopyIcon, CheckIcon, DownloadIcon } from './icons';
+import { CopyIcon, CheckIcon } from './icons';
+import CodeEditor from './CodeEditor';
 
 interface CodeBlockProps {
-  code: string;
-  filePath?: string;
-  language?: string;
+    code: string;
+    language: string;
+    filePath?: string;
 }
 
-export const CodeBlock: React.FC<CodeBlockProps> = ({ code, filePath }) => {
-  const [isCopied, setIsCopied] = useState(false);
+const CodeBlock: React.FC<CodeBlockProps> = ({ code, language, filePath }) => {
+    const [isCopied, setIsCopied] = useState(false);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(code);
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2000);
-  };
+    const handleCopy = () => {
+        navigator.clipboard.writeText(code).then(() => {
+            setIsCopied(true);
+            setTimeout(() => setIsCopied(false), 2000);
+        });
+    };
+    
+    // Calculate editor height based on number of lines
+    const lines = code.trim().split('\n').length;
+    // Set a dynamic height with min and max values to keep it reasonable
+    const editorHeight = `${Math.max(50, Math.min(400, lines * 21))}px`;
 
-  const handleDownload = () => {
-    if (!filePath) return;
-    const blob = new Blob([code], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filePath.split('/').pop() || 'file.txt';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  return (
-    <div className="bg-black/30 rounded-xl overflow-hidden border border-white/10 my-4">
-        <div className="bg-black/20 px-4 py-2 text-xs text-slate-400 font-mono flex justify-between items-center">
-            <span>{filePath || 'Code Example'}</span>
-            <div className="flex items-center gap-4">
-                {filePath && (
-                    <button 
-                        onClick={handleDownload}
-                        className="text-slate-400 hover:text-white transition-colors flex items-center gap-1.5"
-                        aria-label="Download file"
+    return (
+        <div className="bg-gray-50 dark:bg-black/30 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 my-4 relative group text-left">
+            {(filePath || language) && (
+                 <div className="px-4 py-2 bg-gray-100 dark:bg-gray-900/70 border-b border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 font-mono flex items-center justify-between">
+                    <span>{filePath || `language: ${language}`}</span>
+                     <button
+                        onClick={handleCopy}
+                        className="p-1.5 bg-gray-200 dark:bg-gray-700/50 rounded-md text-gray-700 dark:text-gray-300 flex items-center gap-1.5"
+                        aria-label="Copy code"
                     >
-                        <DownloadIcon className="w-4 h-4" />
+                        {isCopied ? (
+                            <>
+                                <CheckIcon className="w-4 h-4 text-current" />
+                                <span className="text-xs">Copied!</span>
+                            </>
+                        ) : (
+                             <>
+                                <CopyIcon className="w-4 h-4" />
+                                <span className="text-xs">Copy</span>
+                            </>
+                        )}
                     </button>
-                )}
-                <button 
-                    onClick={handleCopy}
-                    className="text-slate-400 hover:text-white transition-colors flex items-center gap-1.5"
-                    aria-label={isCopied ? 'Code copied to clipboard' : 'Copy code to clipboard'}
-                >
-                    {isCopied ? (
-                        <>
-                            <CheckIcon className="w-4 h-4 text-green-400" />
-                            <span>Copied!</span>
-                        </>
-                    ) : (
-                        <>
-                            <CopyIcon className="w-4 h-4" />
-                        </>
-                    )}
-                </button>
-            </div>
+                </div>
+            )}
+            <CodeEditor
+                value={code.trim()}
+                language={language}
+                readOnly={true}
+                height={filePath ? '400px' : editorHeight}
+            />
         </div>
-        <pre className="p-4 text-sm overflow-x-auto max-h-[60vh]">
-            <code>
-                {code}
-            </code>
-        </pre>
-    </div>
-  );
+    );
 };
+
+export default CodeBlock;

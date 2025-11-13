@@ -1,274 +1,316 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { GenerationConfig, GenerationResult, FrameworkOption, AiChatMessage } from '../types';
-import { generateApiStream, refineCodeStream } from '../services/geminiService';
-import { CodeBlock } from './CodeBlock';
-import { SendIcon } from './icons';
-import { techStack } from '../constants';
+import React, { useState, useMemo, useEffect } from 'react';
+import { techStack, testingFrameworks } from '../constants';
+import { GeneratedCode, GenerationConfig, OpenApiSpec } from '../types';
+import { generateApiStream } from '../services/geminiService';
+import CodeBlock from './CodeBlock';
+import { SparklesIcon, FileCodeIcon, DownloadIcon, GlobeAltIcon } from './icons';
+import JSZip from 'jszip';
+import saveAs from 'file-saver';
+import ApiPreview from './ApiPreview';
 
-type ActiveTab = 'code' | 'explanation' | 'docs' | 'deployment';
+// A simple loader component
+const Loader: React.FC<{ message: string }> = ({ message }) => (
+    <div className="flex flex-col items-center justify-center h-full text-center p-8">
+        <SparklesIcon className="w-16 h-16 text-blue-500 animate-pulse" />
+        <p className="mt-6 text-xl font-semibold">{message}</p>
+        <p className="mt-2 text-gray-600 dark:text-gray-400">Please wait, this can take a moment.</p>
+    </div>
+);
+
 
 const ApiGeneratorPage: React.FC = () => {
-    const [config, setConfig] = useState<GenerationConfig>({
+    const [config, setConfig] = useState<Omit<GenerationConfig, 'prompt'>>({
         language: 'nodejs',
         framework: 'express',
         database: 'mongodb',
-        prompt: 'A simple blog API with posts and comments. Include user authentication.',
+        generateTests: true,
+        testingFramework: 'jest',
+        generateDocs: true,
+        addValidation: true,
     });
-    const [result, setResult] = useState<GenerationResult>({ code: [], explanation: '', docs: '', deployment: '' });
-    const [isLoading, setIsLoading] = useState(false);
+    const [prompt, setPrompt] = useState('');
+    const [generationStatus, setGenerationStatus] = useState<'idle' | 'generating' | 'complete' | 'error'>('idle');
     const [error, setError] = useState('');
-    const [activeTab, setActiveTab] = useState<ActiveTab>('code');
-    const [currentFrameworks, setCurrentFrameworks] = useState<FrameworkOption[]>(techStack.frameworks.filter(f => f.language === 'nodejs'));
-    const [aiChatMessages, setAiChatMessages] = useState<AiChatMessage[]>([]);
-    const [refinementPrompt, setRefinementPrompt] = useState('');
-    const [isRefining, setIsRefining] = useState(false);
-    const chatContainerRef = useRef<HTMLDivElement>(null);
+    
+    const [generatedFiles, setGeneratedFiles] = useState<GeneratedCode[]>([]);
+    const [selectedFile, setSelectedFile] = useState<GeneratedCode | null>(null);
+    const [activeView, setActiveView] = useState<'files' | 'preview'>('files');
+    const [openApiSpec, setOpenApiSpec] = useState<OpenApiSpec | null>(null);
 
-    useEffect(() => {
-        const frameworks = techStack.frameworks.filter(f => f.language === config.language);
-        setCurrentFrameworks(frameworks);
-        if (frameworks.length > 0 && !frameworks.some(f => f.id === config.framework)) {
-            setConfig(prev => ({ ...prev, framework: frameworks[0].id }));
-        }
+
+    const isLoading = generationStatus === 'generating';
+
+    // Filter frameworks based on selected language
+    const filteredFrameworks = useMemo(() => {
+        return techStack.frameworks.filter(f => f.language === config.language);
     }, [config.language]);
 
+    const availableTestingFrameworks = useMemo(() => {
+        return testingFrameworks[config.language] || [];
+    }, [config.language]);
+    
+    // Auto-select first framework and testing framework when language changes
     useEffect(() => {
-        if (chatContainerRef.current) {
-            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-        }
-    }, [aiChatMessages]);
+        const newFramework = filteredFrameworks.find(f => f.id === config.framework) ? config.framework : (filteredFrameworks[0]?.id || '');
+        const newTestingFrameworks = testingFrameworks[config.language] || [];
+        const newTestingFramework = newTestingFrameworks.length > 0 ? newTestingFrameworks[0].id : '';
+        
+        setConfig(c => ({
+            ...c,
+            framework: newFramework,
+            testingFramework: newTestingFramework
+        }));
+
+    }, [config.language]);
+    
+    const resetResults = () => {
+        setGeneratedFiles([]);
+        setSelectedFile(null);
+        setOpenApiSpec(null);
+        setActiveView('files');
+    };
 
     const handleGenerate = async () => {
-        setIsLoading(true);
+        if (!prompt.trim()) {
+            setError('Please enter a prompt describing your API.');
+            return;
+        }
+        
+        setGenerationStatus('generating');
         setError('');
-        setResult({ code: [], explanation: '', docs: '', deployment: '' });
-        setActiveTab('code');
-        setAiChatMessages([]);
+        resetResults();
+        
+        const fullConfig: GenerationConfig = { ...config, prompt };
 
         try {
-            const stream = await generateApiStream(config);
-            let partialResult: GenerationResult = { code: [], explanation: '', docs: '', deployment: '' };
-            let currentFile = '';
-            let currentContent = '';
-            let currentSection = '';
-
+            const stream = await generateApiStream(fullConfig);
+            
+            let fullResponse = '';
             for await (const chunk of stream) {
-                const text = chunk.text;
-
-                if (text.includes('[START_CODE:')) {
-                    if (currentFile) { // Finish previous file
-                        partialResult.code.push({ filePath: currentFile, code: currentContent.trim() });
-                    }
-                    currentSection = 'code';
-                    currentFile = text.substring(text.indexOf('[START_CODE:') + 12, text.indexOf(']'));
-                    currentContent = text.substring(text.indexOf(']') + 1);
-                } else if (text.includes('[END_CODE]')) {
-                    currentContent += text.replace('[END_CODE]', '');
-                    partialResult.code.push({ filePath: currentFile, code: currentContent.trim() });
-                    currentFile = '';
-                    currentContent = '';
-                    currentSection = '';
-                } else if (text.includes('[START_EXPLANATION]')) {
-                    currentSection = 'explanation';
-                    currentContent = text.replace('[START_EXPLANATION]', '');
-                } else if (text.includes('[END_EXPLANATION]')) {
-                    currentSection = '';
-                    partialResult.explanation += currentContent + text.replace('[END_EXPLANATION]', '');
-                    currentContent = '';
-                } else if (text.includes('[START_DOCS]')) {
-                    currentSection = 'docs';
-                    currentContent = text.replace('[START_DOCS]', '');
-                } else if (text.includes('[END_DOCS]')) {
-                    currentSection = '';
-                    partialResult.docs += currentContent + text.replace('[END_DOCS]', '');
-                    currentContent = '';
-                } else if (text.includes('[START_DEPLOYMENT]')) {
-                    currentSection = 'deployment';
-                    currentContent = text.replace('[START_DEPLOYMENT]', '');
-                } else if (text.includes('[END_DEPLOYMENT]')) {
-                    currentSection = '';
-                    partialResult.deployment += currentContent + text.replace('[END_DEPLOYMENT]', '');
-                    currentContent = '';
-                } else {
-                    if (currentSection === 'code') currentContent += text;
-                    if (currentSection === 'explanation') partialResult.explanation += text;
-                    if (currentSection === 'docs') partialResult.docs += text;
-                    if (currentSection === 'deployment') partialResult.deployment += text;
-                }
-                
-                setResult({ ...partialResult, code: [...partialResult.code] });
+                fullResponse += chunk.text;
             }
+            
+            const files: GeneratedCode[] = [];
+            // A more flexible regex to handle variations in model output for file path and code blocks.
+            const fileRegex = /\[\s*START_CODE\s*:\s*(.*?)\]([\s\S]*?)\[\s*END_CODE\s*]/g;
+            let match;
+
+            while ((match = fileRegex.exec(fullResponse)) !== null) {
+                if (match[1] && match[2]) {
+                    // Clean up file path: remove potential braces, quotes, etc.
+                    const filePath = match[1].trim().replace(/[{}"']/g, '');
+                    
+                    // Clean up code: remove potential markdown fences if they exist
+                    let code = match[2].trim();
+                    const codeFenceRegex = /^```(?:\w+)?\n([\s\S]*)\n```$/;
+                    const codeMatch = code.match(codeFenceRegex);
+                    if (codeMatch && codeMatch[1]) {
+                        code = codeMatch[1];
+                    }
+
+                    files.push({
+                        filePath: filePath,
+                        code: code.trim(),
+                    });
+                }
+            }
+
+            if (files.length === 0) {
+                throw new Error("The AI did not return any code files. Please try refining your prompt or check the model's response.");
+            }
+            
+            setGeneratedFiles(files);
+            setSelectedFile(files[0]);
+
+            const openApiFile = files.find(f => f.filePath === 'openapi.json');
+            if (openApiFile) {
+                try {
+                    const spec = JSON.parse(openApiFile.code);
+                    setOpenApiSpec(spec);
+                    setActiveView('preview'); 
+                } catch (e) {
+                    console.error("Failed to parse openapi.json", e);
+                    setOpenApiSpec(null);
+                    setActiveView('files');
+                }
+            } else {
+                setOpenApiSpec(null);
+                setActiveView('files');
+            }
+            
+            setGenerationStatus('complete');
+
         } catch (e: any) {
             console.error(e);
-            setError('An error occurred during generation. Please check the console for details.');
-        } finally {
-            setIsLoading(false);
+            setError(`An error occurred: ${e.message}`);
+            setGenerationStatus('error');
         }
     };
     
-    const handleRefine = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!refinementPrompt.trim() || isRefining) return;
+    const handleDownloadZip = () => {
+        const zip = new JSZip();
+        generatedFiles.forEach(file => {
+            zip.file(file.filePath, file.code);
+        });
         
-        const userMessage: AiChatMessage = { role: 'user', content: refinementPrompt };
-        setAiChatMessages(prev => [...prev, userMessage]);
-        setIsRefining(true);
-        setRefinementPrompt('');
-
-        const assistantMessage: AiChatMessage = { role: 'assistant', content: '' };
-        setAiChatMessages(prev => [...prev, assistantMessage]);
-        
-        try {
-            const initialCode = result.code.map(c => `// File: ${c.filePath}\n${c.code}`).join('\n\n');
-            const history = [
-                { role: 'user', parts: `Here is the initial API I generated:\n${initialCode}` },
-                ...aiChatMessages.slice(0, -1).map(m => ({ role: m.role === 'user' ? 'user' : 'model', parts: m.content })),
-            ];
-
-            const stream = await refineCodeStream(history, userMessage.content);
-            
-            let finalContent = '';
-            for await (const chunk of stream) {
-                finalContent += chunk.text;
-                setAiChatMessages(prev => {
-                    const newMessages = [...prev];
-                    newMessages[newMessages.length - 1].content = finalContent;
-                    return newMessages;
-                });
-            }
-
-        } catch (e) {
-            setAiChatMessages(prev => {
-                const newMessages = [...prev];
-                newMessages[newMessages.length - 1].content = "Sorry, I encountered an error trying to refine the code.";
-                return newMessages;
-            });
-        } finally {
-            setIsRefining(false);
-        }
+        zip.generateAsync({ type: 'blob' }).then(content => {
+            saveAs(content, 'api-forge-export.zip');
+        });
     };
 
-    const renderTabContent = () => {
-        switch (activeTab) {
-            case 'code':
-                return result.code.length > 0 ? (
-                    result.code.map(file => <CodeBlock key={file.filePath} filePath={file.filePath} code={file.code} />)
-                ) : <div className="flex items-center justify-center h-full text-slate-400">Generated code will appear here.</div>;
-            case 'explanation':
-                return result.explanation ? <div className="prose prose-invert max-w-none p-4 prose-h4:text-cyan-400" dangerouslySetInnerHTML={{ __html: result.explanation }} /> : <div className="flex items-center justify-center h-full text-slate-400">The AI-generated explanation will appear here.</div>;
-            case 'docs':
-                return result.docs ? <div className="prose prose-invert max-w-none p-4" dangerouslySetInnerHTML={{ __html: result.docs }} /> : <div className="flex items-center justify-center h-full text-slate-400">API documentation will appear here.</div>;
-            case 'deployment':
-                return result.deployment ? <div className="prose prose-invert max-w-none p-4" dangerouslySetInnerHTML={{ __html: result.deployment }} /> : <div className="flex items-center justify-center h-full text-slate-400">Deployment suggestions will appear here.</div>;
-            default:
-                return null;
+    const renderResults = () => {
+        if (isLoading) {
+            return <Loader message="Generating your API..." />;
         }
-    };
+        
+        if (generationStatus === 'error') {
+            return <div className="p-8 text-center text-red-500 dark:text-red-400">{error}</div>
+        }
+        
+        if (generationStatus !== 'complete' || generatedFiles.length === 0) {
+             return (
+                <div className="flex flex-col items-center justify-center h-full text-center p-8 text-gray-600 dark:text-gray-400">
+                    <FileCodeIcon className="w-16 h-16" />
+                    <p className="mt-4 text-xl font-semibold">Your generated API will appear here</p>
+                    <p className="mt-2">Describe your API, choose your stack, and click "Generate API".</p>
+                </div>
+            );
+        }
 
-    return (
-        <div className="flex-grow grid grid-cols-1 lg:grid-cols-12 gap-2 overflow-hidden h-[calc(100vh_-_150px)]">
-            {/* Left Panel: Configuration */}
-            <div className="lg:col-span-3 bg-black/20 border border-white/10 rounded-lg p-4 flex flex-col overflow-y-auto">
-                <h2 className="text-lg font-semibold text-cyan-400 mb-4">Configuration</h2>
-                <div className="space-y-4 flex-grow">
-                    <div>
-                        <label className="block text-sm font-medium mb-1">Describe your API</label>
-                        <textarea
-                            rows={6}
-                            className="w-full bg-black/30 border border-white/10 rounded-md p-2 text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none"
-                            value={config.prompt}
-                            onChange={(e) => setConfig({ ...config, prompt: e.target.value })}
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium mb-1">Language</label>
-                        <select
-                            className="w-full bg-black/30 border border-white/10 rounded-md p-2 text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none"
-                            value={config.language}
-                            onChange={(e) => setConfig({ ...config, language: e.target.value as any })}
-                        >
-                            {techStack.languages.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium mb-1">Framework</label>
-                         <select
-                            className="w-full bg-black/30 border border-white/10 rounded-md p-2 text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none"
-                            value={config.framework}
-                            onChange={(e) => setConfig({ ...config, framework: e.target.value })}
-                        >
-                            {currentFrameworks.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium mb-1">Database</label>
-                        <select
-                            className="w-full bg-black/30 border border-white/10 rounded-md p-2 text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none"
-                            value={config.database}
-                            onChange={(e) => setConfig({ ...config, database: e.target.value })}
-                        >
-                            {techStack.databases.map(db => <option key={db.id} value={db.id}>{db.name}</option>)}
-                        </select>
-                    </div>
-                </div>
-                 <button 
-                    onClick={handleGenerate} 
-                    disabled={isLoading}
-                    className="w-full mt-4 bg-gradient-to-r from-cyan-600 to-teal-600 text-white py-2 px-4 rounded-lg hover:from-cyan-500 hover:to-teal-500 disabled:opacity-50 flex items-center justify-center"
-                >
-                    {isLoading ? 'Generating...' : 'Generate API'}
-                </button>
-                {error && <p className="text-red-400 text-sm mt-2">{error}</p>}
-            </div>
-
-            {/* Center Panel: Results */}
-            <div className="lg:col-span-6 bg-black/20 border border-white/10 rounded-lg flex flex-col overflow-hidden">
-                <div className="flex-shrink-0 border-b border-white/10">
-                    <nav className="flex space-x-1 p-1">
-                        {(['code', 'explanation', 'docs', 'deployment'] as ActiveTab[]).map(tab => (
-                            <button
-                                key={tab}
-                                onClick={() => setActiveTab(tab)}
-                                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === tab ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400 hover:bg-white/5'}`}
-                            >
-                                {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                            </button>
-                        ))}
-                    </nav>
-                </div>
-                <div className="flex-grow overflow-y-auto p-2">
-                    {isLoading && activeTab === 'code' ? <div className="flex items-center justify-center h-full text-slate-400">🤖 Generating your API...</div> : renderTabContent()}
-                </div>
-            </div>
-
-            {/* Right Panel: AI Assistant */}
-            <div className="lg:col-span-3 bg-black/20 border border-white/10 rounded-lg flex flex-col overflow-hidden">
-                <h2 className="text-lg font-semibold text-cyan-400 p-4 border-b border-white/10 flex-shrink-0">AI Assistant</h2>
-                <div ref={chatContainerRef} className="flex-grow overflow-y-auto p-4 space-y-4">
-                    {aiChatMessages.length === 0 && <p className="text-slate-400 text-sm text-center">Refine your API with follow-up prompts after generating.</p>}
-                    {aiChatMessages.map((msg, index) => (
-                        <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-xs lg:max-w-sm rounded-lg px-3 py-2 ${msg.role === 'user' ? 'bg-cyan-600 text-white' : 'bg-slate-700 text-slate-200'}`}>
-                                 <div className="prose prose-invert prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: msg.content }} />
-                            </div>
-                        </div>
-                    ))}
-                    {isRefining && aiChatMessages[aiChatMessages.length-1]?.role === 'assistant' && <div className="flex justify-start"><div className="bg-slate-700 text-slate-200 rounded-lg px-3 py-2">...</div></div>}
-                </div>
-                <div className="flex-shrink-0 p-2 border-t border-white/10">
-                    <form onSubmit={handleRefine} className="flex items-center gap-2">
-                        <input
-                            type="text"
-                            value={refinementPrompt}
-                            onChange={(e) => setRefinementPrompt(e.target.value)}
-                            placeholder="e.g., 'Add JWT authentication'"
-                            disabled={result.code.length === 0 || isRefining}
-                            className="w-full bg-black/30 border border-white/10 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-cyan-500 focus:outline-none disabled:opacity-50"
-                        />
-                        <button type="submit" disabled={result.code.length === 0 || isRefining || !refinementPrompt.trim()} className="bg-cyan-600 text-white p-2 rounded-lg hover:bg-cyan-500 disabled:opacity-50">
-                            <SendIcon className="w-5 h-5" />
+        return (
+            <div className="flex flex-col h-full">
+                <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between pl-4">
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => setActiveView('files')} className={`flex items-center gap-2 px-3 py-2 text-sm font-semibold border-b-2 ${activeView === 'files' ? 'border-black dark:border-white text-black dark:text-white' : 'border-transparent text-gray-500 hover:text-black dark:hover:text-white'}`}>
+                            <FileCodeIcon className="w-4 h-4" /> Files
                         </button>
-                    </form>
+                        {openApiSpec && (
+                             <button onClick={() => setActiveView('preview')} className={`flex items-center gap-2 px-3 py-2 text-sm font-semibold border-b-2 ${activeView === 'preview' ? 'border-black dark:border-white text-black dark:text-white' : 'border-transparent text-gray-500 hover:text-black dark:hover:text-white'}`}>
+                                <GlobeAltIcon className="w-4 h-4" /> API Preview
+                            </button>
+                        )}
+                    </div>
+                    {generatedFiles.length > 0 && (
+                        <button onClick={handleDownloadZip} className="flex items-center gap-2 text-sm py-1 px-3 m-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800" aria-label="Download ZIP">
+                            <DownloadIcon className="w-4 h-4" />
+                            Download .zip
+                        </button>
+                    )}
+                </div>
+                <div className="flex-grow flex overflow-hidden">
+                    {activeView === 'files' ? (
+                        <>
+                            <div className="w-1/3 min-w-[200px] border-r border-gray-200 dark:border-gray-700 overflow-y-auto">
+                                {generatedFiles.map(file => (
+                                    <button 
+                                        key={file.filePath}
+                                        onClick={() => setSelectedFile(file)}
+                                        className={`w-full text-left px-4 py-2 text-sm truncate ${selectedFile?.filePath === file.filePath ? 'bg-blue-100 dark:bg-gray-800 font-semibold' : 'hover:bg-gray-100 dark:hover:bg-gray-800/50'}`}
+                                    >
+                                        {file.filePath}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="w-2/3 flex-grow overflow-y-auto">
+                                {selectedFile && <CodeBlock code={selectedFile.code} language={selectedFile.filePath.endsWith('.json') ? 'json' : config.language} />}
+                            </div>
+                        </>
+                    ) : openApiSpec ? (
+                        <div className="w-full overflow-y-auto">
+                            <ApiPreview spec={openApiSpec} />
+                        </div>
+                    ) : null }
+                </div>
+            </div>
+        )
+    };
+    
+    return (
+        <div className="h-full flex flex-col">
+            <div className="text-center pt-0 pb-8">
+                <h1 className="text-4xl font-bold">API Forge</h1>
+                <p className="text-gray-600 dark:text-gray-400 mt-2 max-w-2xl mx-auto">
+                    Generate a backend API from a simple text prompt.
+                </p>
+            </div>
+            
+            <div className="flex-grow grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-hidden">
+                <div className={`lg:col-span-1 bg-white dark:bg-gray-900/70 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 flex flex-col`}>
+                    <div className="flex-grow overflow-y-auto pr-2 space-y-6">
+                        <div>
+                            <label htmlFor="prompt" className="block text-lg font-semibold mb-2">1. Describe Your API</label>
+                            <textarea id="prompt" value={prompt} onChange={e => setPrompt(e.target.value)} rows={5}
+                                placeholder="e.g., A blog API with Users (name, email) and Posts (title, content)."
+                                className="w-full bg-gray-100 dark:bg-black/30 border border-gray-300 dark:border-gray-600 rounded-md py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-white"
+                            />
+                        </div>
+                        
+                        <div>
+                             <label className="block text-lg font-semibold mb-2">2. Choose Your Stack</label>
+                             <div className="space-y-4">
+                                <div>
+                                    <label className="text-sm font-medium">Language</label>
+                                    <select value={config.language} onChange={e => setConfig(c => ({...c, language: e.target.value}))} className="mt-1 w-full bg-gray-100 dark:bg-black/30 border border-gray-300 dark:border-gray-600 rounded-md py-2 px-3 text-sm focus:outline-none">
+                                        {techStack.languages.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                                    </select>
+                                </div>
+                                 <div>
+                                    <label className="text-sm font-medium">Framework</label>
+                                    <select value={config.framework} onChange={e => setConfig(c => ({...c, framework: e.target.value}))} className="mt-1 w-full bg-gray-100 dark:bg-black/30 border border-gray-300 dark:border-gray-600 rounded-md py-2 px-3 text-sm focus:outline-none">
+                                        {filteredFrameworks.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                    </select>
+                                </div>
+                                 <div>
+                                    <label className="text-sm font-medium">Database</label>
+                                    <select value={config.database} onChange={e => setConfig(c => ({...c, database: e.target.value}))} className="mt-1 w-full bg-gray-100 dark:bg-black/30 border border-gray-300 dark:border-gray-600 rounded-md py-2 px-3 text-sm focus:outline-none">
+                                        {techStack.databases.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                                    </select>
+                                </div>
+                             </div>
+                        </div>
+
+                         <div>
+                             <label className="block text-lg font-semibold mb-2">3. Additional Options</label>
+                             <div className="space-y-4">
+                                <div className="flex items-center justify-between p-3 rounded-md bg-gray-100 dark:bg-black/30">
+                                    <label htmlFor="add-validation" className="text-sm font-medium">Add Input Validation Middleware</label>
+                                    <input type="checkbox" id="add-validation" checked={config.addValidation} onChange={e => setConfig(c => ({ ...c, addValidation: e.target.checked }))} className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                                </div>
+                                <div className="flex items-center justify-between p-3 rounded-md bg-gray-100 dark:bg-black/30">
+                                    <label htmlFor="generate-docs" className="text-sm font-medium">Generate OpenAPI/Swagger Docs</label>
+                                    <input type="checkbox" id="generate-docs" checked={config.generateDocs} onChange={e => setConfig(c => ({ ...c, generateDocs: e.target.checked }))} className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                                </div>
+                                <div className="p-3 rounded-md bg-gray-100 dark:bg-black/30">
+                                    <div className="flex items-center justify-between">
+                                        <label htmlFor="generate-tests" className="text-sm font-medium">Generate Unit Tests</label>
+                                        <input type="checkbox" id="generate-tests" checked={config.generateTests} onChange={e => setConfig(c => ({ ...c, generateTests: e.target.checked }))} className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                                    </div>
+                                    {config.generateTests && (
+                                        <div className="mt-3">
+                                            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Testing Framework</label>
+                                            <select value={config.testingFramework} onChange={e => setConfig(c => ({...c, testingFramework: e.target.value}))} disabled={availableTestingFrameworks.length === 0} className="mt-1 w-full bg-white dark:bg-gray-800/50 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-2 text-sm focus:outline-none disabled:opacity-50">
+                                                {availableTestingFrameworks.length > 0 ? (
+                                                    availableTestingFrameworks.map(f => <option key={f.id} value={f.id}>{f.name}</option>)
+                                                ) : (
+                                                    <option>No frameworks available</option>
+                                                )}
+                                            </select>
+                                        </div>
+                                    )}
+                                </div>
+                             </div>
+                        </div>
+                    </div>
+                    {error && <p className="text-red-500 dark:text-red-400 text-sm mt-2 flex-shrink-0">{error}</p>}
+                    <button onClick={handleGenerate} disabled={isLoading}
+                        className="w-full mt-4 flex-shrink-0 flex items-center justify-center gap-2 bg-black dark:bg-white text-white dark:text-black font-semibold py-3 px-4 rounded-lg transition-all hover:bg-gray-800 dark:hover:bg-gray-200 disabled:opacity-50"
+                    >
+                       <SparklesIcon className="w-5 h-5"/> Generate API
+                    </button>
+                </div>
+                
+                <div className="lg:col-span-2 bg-white dark:bg-gray-900/70 rounded-2xl border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden">
+                   {renderResults()}
                 </div>
             </div>
         </div>

@@ -1,7 +1,5 @@
 {
-  "name": "Copy of API Forge",
+  "name": "Ai Tutor",
   "description": "An advanced AI-powered API Generator Platform that allows users to create backend APIs in multiple programming languages through simple text prompts.",
-  "requestFramePermissions": [
-    "microphone"
-  ]
+  "requestFramePermissions": []
 }

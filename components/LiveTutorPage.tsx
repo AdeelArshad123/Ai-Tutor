@@ -222,54 +222,54 @@ const LiveTutorPage: React.FC<{ onBack: () => void; user: User; }> = ({ onBack, 
             case 'connected': return <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse"></div>;
             case 'connecting': return <div className="w-3 h-3 rounded-full bg-yellow-500 animate-pulse"></div>;
             case 'error': return <div className="w-3 h-3 rounded-full bg-red-500"></div>;
-            case 'disconnected': return <div className="w-3 h-3 rounded-full bg-slate-500"></div>;
+            case 'disconnected': return <div className="w-3 h-3 rounded-full bg-gray-500"></div>;
         }
     };
 
     return (
         <div>
-            <button onClick={onBack} className="mb-6 bg-white/10 text-white py-2 px-4 rounded-lg hover:bg-white/20 transition-colors">
+            <button onClick={onBack} className="mb-6 bg-gray-200 dark:bg-gray-800 text-black dark:text-white py-2 px-4 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors">
                 &larr; Back to Home
             </button>
 
             <div className="text-center mb-8">
                 <h1 className="text-4xl font-bold">Live AI Voice Tutor</h1>
-                <p className="text-slate-400 mt-2">Speak directly with an AI to get help with your questions.</p>
+                <p className="text-gray-600 dark:text-gray-400 mt-2">Speak directly with an AI to get help with your questions.</p>
             </div>
 
-            <div className="max-w-4xl mx-auto bg-black/20 backdrop-blur-xl p-8 rounded-2xl shadow-lg border border-white/10">
+            <div className="max-w-4xl mx-auto bg-white dark:bg-black/50 p-8 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700">
                 <div className="flex justify-between items-center mb-6">
                     <div className="flex items-center gap-2">
                         {getStatusIndicator()}
                         <span className="capitalize">{status}</span>
                     </div>
                     {status === 'connected' || status === 'connecting' ? (
-                         <button onClick={() => handleDisconnect()} className="bg-red-600 hover:bg-red-500 text-white py-2 px-4 rounded-lg transition-colors">
+                         <button onClick={() => handleDisconnect()} className="bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-lg transition-colors">
                             End Session
                         </button>
                     ) : (
-                        <button onClick={handleConnect} className="bg-gradient-to-r from-cyan-600 to-teal-600 text-white py-2 px-4 rounded-lg hover:from-cyan-500 hover:to-teal-500 transition-all">
+                        <button onClick={handleConnect} className="bg-black dark:bg-white text-white dark:text-black font-semibold py-2 px-4 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 transition-all">
                             Start Session
                         </button>
                     )}
                 </div>
 
-                <div className="h-96 bg-black/20 rounded-lg p-4 overflow-y-auto space-y-4 border border-white/10">
+                <div className="h-96 bg-gray-100 dark:bg-black/40 rounded-lg p-4 overflow-y-auto space-y-4 border border-gray-200 dark:border-gray-700">
                     {transcript.length === 0 && (
-                        <div className="flex items-center justify-center h-full text-slate-400">
+                        <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
                             <p>{status === 'disconnected' ? 'Start a session to begin the conversation.' : 'Start speaking...'}</p>
                         </div>
                     )}
                     {transcript.map((entry, index) => (
                         <div key={index} className={`flex ${entry.speaker === 'user' ? 'justify-end' : 'justify-start'}`}>
-                             <div className={`max-w-md rounded-lg px-3 py-2 ${entry.speaker === 'user' ? 'bg-cyan-600 text-white' : 'bg-slate-700 text-slate-200'}`}>
+                             <div className={`max-w-md rounded-lg px-3 py-2 ${entry.speaker === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-black dark:text-white'}`}>
                                 <p className="font-bold text-sm mb-1">{entry.speaker === 'user' ? user.username : 'AI Tutor'}</p>
                                 <p>{entry.text}</p>
                             </div>
                         </div>
                     ))}
                 </div>
-                {status === 'error' && <p className="text-red-400 text-center mt-4">A connection error occurred. Please try starting a new session.</p>}
+                {status === 'error' && <p className="text-red-500 dark:text-red-400 text-center mt-4">A connection error occurred. Please try starting a new session.</p>}
             </div>
         </div>
     );

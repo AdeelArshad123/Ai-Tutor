@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { GenerationConfig, Quiz, LearningPath, InterviewQuestion } from '../types';
+import { GenerationConfig, Quiz, LearningPath, InterviewQuestion, GeneratedCode } from '../types';
 import { learningData } from '../constants';
 import MarkdownIt from 'markdown-it';
 
@@ -12,6 +12,20 @@ const textModel = 'gemini-2.5-flash';
 const proModel = 'gemini-2.5-pro';
 
 const md = new MarkdownIt();
+
+// Helper to convert File to base64
+const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => {
+            // result is "data:mime/type;base64,..." - we only need the part after the comma
+            const result = reader.result as string;
+            resolve(result.split(',')[1]);
+        };
+        reader.onerror = error => reject(error);
+    });
+};
 
 const parseJsonFromMarkdown = <T>(markdown: string): T | null => {
     try {
@@ -51,6 +65,44 @@ export const generateQuiz = async (topicTitle: string, topicContent: string): Pr
         
 Topic: ${topicTitle}
 Content: ${topicContent}`,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    questions: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                question: { type: Type.STRING },
+                                options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                correctAnswer: { type: Type.STRING },
+                                explanation: { type: Type.STRING },
+                            },
+                            required: ["question", "options", "correctAnswer", "explanation"],
+                        },
+                    },
+                },
+                required: ["questions"],
+            },
+        }
+    });
+    
+    const quizData = JSON.parse(response.text);
+    if (!quizData || !quizData.questions || quizData.questions.length === 0) {
+        throw new Error('AI failed to generate a valid quiz.');
+    }
+    return quizData;
+};
+
+export const generateQuizFromTopicText = async (topicText: string): Promise<Quiz> => {
+    const response = await ai.models.generateContent({
+        model: textModel,
+        contents: `Create a 3-question multiple-choice quiz about the following topic. Be comprehensive based on the text provided. For each question, provide 4 options, indicate the correct answer, and give a brief explanation for why it's correct.
+        
+Topic Text:
+${topicText}`,
         config: {
             responseMimeType: "application/json",
             responseSchema: {
@@ -217,48 +269,113 @@ Candidate's Explanation:
     return md.render(response.text);
 };
 
+export const translateCode = async (sourceCode: string, sourceLanguage: string, targetLanguage: string): Promise<string> => {
+    const prompt = `Translate the following code snippet from ${sourceLanguage} to ${targetLanguage}.
+Provide *only* the raw translated code, without any surrounding text, explanations, or markdown fences like \`\`\`.
+
+Source Code (${sourceLanguage}):
+\`\`\`
+${sourceCode}
+\`\`\`
+`;
+    const response = await ai.models.generateContent({ model: proModel, contents: prompt });
+    return response.text.trim();
+};
+
+export const generateUnitTests = async (sourceCode: string, language: string, framework: string): Promise<string> => {
+    const prompt = `You are an expert software engineer specializing in Test-Driven Development (TDD).
+Your task is to write a comprehensive suite of unit tests for the following ${language} code using the ${framework} testing framework.
+
+**Instructions:**
+1.  Analyze the provided code to understand its functionality, inputs, and outputs.
+2.  Write a complete test file, including all necessary imports and boilerplate for the ${framework} framework.
+3.  Create multiple test cases to cover:
+    -   Happy path / typical usage.
+    -   Edge cases (e.g., empty inputs, nulls, zeros, boundary values).
+    -   Error handling (if applicable).
+4.  If the code has dependencies (e.g., modules, services), create mock versions of them.
+5.  Provide *only* the raw test code, without any surrounding text, explanations, or markdown fences like \`\`\`.
+
+**Source Code (${language}):**
+\`\`\`
+${sourceCode}
+\`\`\`
+`;
+    const response = await ai.models.generateContent({ model: proModel, contents: prompt });
+    return response.text.trim();
+};
+
+export const improveCode = async (code: string, language: string): Promise<{ improvedCode: string; explanation: string; }> => {
+    const prompt = `As an expert software engineer, review the following ${language} code. Refactor it to improve its quality by addressing the following aspects:
+- Readability and clarity
+- Performance and efficiency
+- Adherence to modern best practices and idiomatic style
+- Error handling
+
+Provide the improved code and a clear, concise explanation of the changes you made and why they are improvements.`;
+
+    const response = await ai.models.generateContent({
+        model: proModel,
+        contents: `
+${prompt}
+
+\`\`\`${language}
+${code}
+\`\`\`
+`,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    improvedCode: {
+                        type: Type.STRING,
+                        description: "The refactored and improved code snippet."
+                    },
+                    explanation: {
+                        type: Type.STRING,
+                        description: "A markdown-formatted explanation of the changes made."
+                    }
+                },
+                required: ["improvedCode", "explanation"]
+            }
+        }
+    });
+
+    return JSON.parse(response.text);
+};
+
 
 // --- API Forge Gemini Functions ---
 
 export const generateApiStream = (config: GenerationConfig) => {
-    const systemInstruction = `You are an expert full-stack software architect specializing in generating complete, production-ready backend APIs. Your task is to take a user's prompt and technical stack selection, and generate a fully functional API.
+    const systemInstruction = `You are an expert software architect. Your task is to generate a complete backend API based on a user's prompt and tech stack selection. Generate all necessary files, including package definitions, server entry points, routes, controllers, and models. The code should be well-structured and idiomatic for the chosen language and framework.
 
-You must follow these steps precisely:
-1.  **Analyze the Prompt:** Understand the user's requirements, identifying entities, relationships, and required features (like authentication).
-2.  **Plan the Architecture:** Define the database schema, API endpoints (with CRUD operations), controllers, services/logic, and data models.
-3.  **Generate Code:** Write clean, well-structured, and idiomatic code for the selected language and framework. The code should be split into logical files (e.g., server.js, routes/user.js, models/product.js).
-4.  **Generate Documentation:** Create API documentation in Markdown format suitable for Postman or Swagger.
-5.  **Generate Explanation:** Provide a clear, concise explanation of the generated code's architecture, file structure, and key logic.
-6.  **Generate Deployment Guide:** Give simple, step-by-step instructions for deploying the generated application to a popular service like Vercel, Render, or Railway.
-
-**Output Format:**
-You MUST structure your response as a single, continuous stream. Use the following special markers to delineate each section. Do NOT nest these markers.
+You MUST structure your response as a single, continuous stream. Use the following special markers to delineate each file. Do NOT nest these markers.
 
 [START_CODE:{{file_path}}]
 // code for the file goes here
-[END_CODE]
+[END_CODE]`;
 
-[START_EXPLANATION]
-A markdown explanation of the architecture.
-[END_EXPLANATION]
+    const testingInstruction = config.generateTests
+        ? `\n-   **Testing Framework:** ${config.testingFramework}. Also generate a corresponding unit test file for each controller and model.`
+        : '';
+    
+    const docsInstruction = config.generateDocs
+        ? `\n-   **API Documentation:** Also generate a comprehensive OpenAPI 3.0 specification file named \`openapi.json\` that documents all the API endpoints.`
+        : '';
 
-[START_DOCS]
-A markdown-formatted API documentation.
-[END_DOCS]
-
-[START_DEPLOYMENT]
-A markdown-formatted deployment guide.
-[END_DEPLOYMENT]
-
-The response should be comprehensive and complete.`;
+    const validationInstruction = config.addValidation
+        ? `\n-   **Input Validation:** Implement input validation middleware for all create (POST) and update (PUT/PATCH) endpoints. Use a standard, popular validation library for the selected stack (e.g., express-validator for Express, Pydantic for FastAPI, etc.). Validation rules should ensure required fields are present and that data types are correct based on the defined models.`
+        : '';
 
     const userPrompt = `Generate a backend API based on the following specifications:
 -   **User's Goal:** "${config.prompt}"
 -   **Language:** ${config.language}
 -   **Framework:** ${config.framework}
--   **Database:** ${config.database}
+-   **Database:** ${config.database}${testingInstruction}${docsInstruction}${validationInstruction}
 
-Please generate all necessary files, including package.json or equivalent dependency file, server entry point, routes, controllers, and models. Ensure database connection logic is included. If authentication is requested, implement a simple JWT-based system.`;
+Please generate all necessary files. The response must only contain code blocks in the specified format.`;
 
     return ai.models.generateContentStream({
         model: proModel,
@@ -269,17 +386,95 @@ Please generate all necessary files, including package.json or equivalent depend
     });
 };
 
-export const refineCodeStream = async (chatHistory: { role: string; parts: string }[], refinementPrompt: string) => {
-    
-    const formattedHistory = chatHistory.map(message => ({
-        role: message.role,
-        parts: [{ text: message.parts }]
-    }));
+// --- Code Mentor Gemini Functions ---
 
-    const chat = ai.chats.create({
-        model: proModel,
-        history: formattedHistory,
-    });
+export const generateCodingChallenge = async (language: string, concept: string): Promise<string> => {
+    const prompt = `Generate a very simple, beginner-friendly coding challenge about "${concept}" in the ${language} programming language. 
+    The challenge should be a single paragraph. Do not include any starter code or solution. Just provide the problem description.`;
+    const response = await ai.models.generateContent({ model: textModel, contents: prompt });
+    return response.text;
+};
+
+export const getCodeHint = async (challenge: string, userCode: string, language: string): Promise<string> => {
+    const prompt = `A beginner programmer is working on the following challenge in ${language}:
+Challenge: "${challenge}"
+
+This is their current code:
+\`\`\`${language}
+${userCode}
+\`\`\`
+
+They are stuck and need a hint. Provide a small, helpful hint to guide them in the right direction. Do not give them the full solution. Just one or two sentences to unblock them.`;
+    const response = await ai.models.generateContent({ model: textModel, contents: prompt });
+    return response.text;
+};
+
+export const evaluateSolution = async (challenge: string, userCode: string, language: string): Promise<string> => {
+    const prompt = `As a friendly and encouraging code mentor, evaluate a beginner's solution for a coding challenge.
+Challenge: "${challenge}"
+
+Their solution in ${language} is:
+\`\`\`${language}
+${userCode}
+\`\`\`
+
+Provide feedback in three parts, formatted as clean HTML markup:
+1.  Start with positive reinforcement.
+2.  Gently point out any errors or areas for improvement (e.g., correctness, style, efficiency).
+3.  Show and explain an optimal or idiomatic solution.`;
+    const response = await ai.models.generateContent({ model: textModel, contents: prompt });
+    return md.render(response.text);
+};
+
+export const getPracticeFeedback = async (code: string, language: string, executionError: string): Promise<string> => {
+    const prompt = `You are an expert and friendly code mentor. A user is practicing their ${language} skills in a code playground.
+Analyze their code.
+
+Their code is:
+\`\`\`${language}
+${code}
+\`\`\`
+
+${executionError 
+    ? `When they ran it, they got this error: "${executionError}". Explain what this error means, why it happened, and how to fix it.`
+    : `The code ran without errors. Review it for best practices, suggest improvements for clarity or efficiency, or offer a follow-up challenge based on what they've written.`
+}
+
+Provide feedback formatted as clean HTML markup. Use <pre><code> for any code blocks in your response.`;
+
+    const response = await ai.models.generateContent({ model: textModel, contents: prompt });
+    return md.render(response.text);
+};
+
+export const generateUiFromImage = async (file: File, prompt: string): Promise<string> => {
+    const base64Image = await fileToBase64(file);
+    const imagePart = {
+        inlineData: {
+            mimeType: file.type,
+            data: base64Image,
+        },
+    };
+
+    const systemInstruction = `You are an expert frontend developer. Your task is to take an image of a UI design and an optional text prompt, and generate a single HTML file that recreates the design.
+-   Use Tailwind CSS for styling. You can assume Tailwind is set up and available.
+-   Generate clean, semantic HTML5.
+-   Try to match the colors, layout, and typography from the image.
+-   If the user provides a prompt, use it for additional context (e.g., "make the buttons interactive", "use this specific color palette").
+-   Your response must be ONLY the raw HTML code, without any surrounding text, explanations, or markdown fences like \`\`\`.`;
+
+    const userPrompt = `Recreate the UI from the provided image. Additional instructions: "${prompt || 'None'}"`;
     
-    return chat.sendMessageStream({ message: `Based on the previously generated code, please apply this refinement: "${refinementPrompt}". Provide only the updated code snippets or new files required. Explain your changes briefly.` });
+    const contents = {
+        parts: [imagePart, { text: userPrompt }],
+    };
+
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash', // Vision capable model
+        contents: contents,
+        config: {
+            systemInstruction: systemInstruction,
+        }
+    });
+
+    return response.text.trim();
 };

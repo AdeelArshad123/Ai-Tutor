@@ -1,34 +1,113 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { getCurrentUser, loginUser, signupUser, logoutUser } from './utils/auth';
-import { User, Language, Topic, LearningPath, InterviewQuestion } from './types';
+import { User, Language, Topic, View, BreadcrumbItem } from './types';
 import { learningData } from './constants';
 import Header from './components/Header';
 import Footer from './components/Footer';
-import HomePage from './components/HomePage';
-import LanguagePage from './components/LanguagePage';
-import TopicPage from './components/TopicPage';
-import LoginPage from './components/LoginPage';
-import SignupPage from './components/SignupPage';
-import SearchResultsPage from './components/SearchResultsPage';
-import CodeDebuggerPage from './components/CodeDebuggerPage';
-import LearningPathPage from './components/LearningPathPage';
-import InterviewPrepPage from './components/InterviewPrepPage';
-import ApiGeneratorPage from './components/ApiGeneratorPage';
-import LiveTutorPage from './components/LiveTutorPage';
 
+// Lazy load all page components for code splitting
+const HomePage = lazy(() => import('./components/HomePage'));
+const LanguagePage = lazy(() => import('./components/LanguagePage'));
+const TopicPage = lazy(() => import('./components/TopicPage'));
+const LoginPage = lazy(() => import('./components/LoginPage'));
+const SignupPage = lazy(() => import('./components/SignupPage'));
+const SearchResultsPage = lazy(() => import('./components/SearchResultsPage'));
+const CodeDebuggerPage = lazy(() => import('./components/CodeDebuggerPage'));
+const LearningPathPage = lazy(() => import('./components/LearningPathPage'));
+const InterviewPrepPage = lazy(() => import('./components/InterviewPrepPage'));
+const ApiGeneratorPage = lazy(() => import('./components/ApiGeneratorPage'));
+const LiveTutorPage = lazy(() => import('./components/LiveTutorPage'));
+const CodeTranslatorPage = lazy(() => import('./components/CodeTranslatorPage'));
+const QuizGeneratorPage = lazy(() => import('./components/QuizGeneratorPage'));
+const CodeMentorPage = lazy(() => import('./components/CodeMentorPage'));
+const EducatorsPage = lazy(() => import('./components/EducatorsPage'));
+const CodePlaygroundPage = lazy(() => import('./components/CodePlaygroundPage'));
+const UnitTestGeneratorPage = lazy(() => import('./components/UnitTestGeneratorPage'));
+const UIDrafterPage = lazy(() => import('./components/UIDrafterPage'));
+const CodeImproverPage = lazy(() => import('./components/CodeImproverPage'));
 
-type View = 
-  | { name: 'home' }
-  | { name: 'language', language: Language }
-  | { name: 'topic', language: Language, topic: Topic }
-  | { name: 'login' }
-  | { name: 'signup' }
-  | { name: 'search', query: string }
-  | { name: 'debugger' }
-  | { name: 'learningPath' }
-  | { name: 'interviewPrep' }
-  | { name: 'apiGenerator' }
-  | { name: 'liveTutor' };
+const LoadingSpinner: React.FC = () => (
+    <div className="flex justify-center items-center h-full w-full py-20">
+        <svg className="animate-spin h-10 w-10 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+    </div>
+);
+
+const findCategoryForLanguage = (languageSlug: string): string | null => {
+    for (const category of learningData) {
+        if (category.languages.some(lang => lang.slug === languageSlug)) {
+            return category.name;
+        }
+    }
+    return null;
+};
+
+const generateBreadcrumbs = (view: View): BreadcrumbItem[] => {
+    const homeCrumb: BreadcrumbItem = { label: 'Home', view: { name: 'home' } };
+
+    switch (view.name) {
+        case 'home':
+            return [{ label: 'Home' }];
+
+        case 'language': {
+            const categoryName = findCategoryForLanguage(view.language.slug);
+            const crumbs: BreadcrumbItem[] = [homeCrumb];
+            if (categoryName) {
+                crumbs.push({ label: categoryName, view: { name: 'home' } });
+            }
+            crumbs.push({ label: view.language.name });
+            return crumbs;
+        }
+
+        case 'topic': {
+            const categoryName = findCategoryForLanguage(view.language.slug);
+            const crumbs: BreadcrumbItem[] = [homeCrumb];
+            if (categoryName) {
+                crumbs.push({ label: categoryName, view: { name: 'home' } });
+            }
+            crumbs.push({
+                label: view.language.name,
+                view: { name: 'language', language: view.language }
+            });
+            crumbs.push({ label: view.topic.title });
+            return crumbs;
+        }
+
+        case 'search':
+            return [homeCrumb, { label: `Search: "${view.query}"` }];
+        case 'debugger':
+            return [homeCrumb, { label: 'AI Code Debugger' }];
+        case 'learningPath':
+            return [homeCrumb, { label: 'Learning Path Generator' }];
+        case 'interviewPrep':
+            return [homeCrumb, { label: 'Interview Simulator' }];
+        case 'apiGenerator':
+            return [homeCrumb, { label: 'API Forge' }];
+        case 'liveTutor':
+            return [homeCrumb, { label: 'Live AI Voice Tutor' }];
+        case 'codeTranslator':
+            return [homeCrumb, { label: 'Code Translator' }];
+        case 'quizGenerator':
+            return [homeCrumb, { label: 'AI Quiz Generator' }];
+        case 'codeMentor':
+            return [homeCrumb, { label: 'Code Mentor' }];
+        case 'playground':
+            return [homeCrumb, { label: 'Code Playground' }];
+        case 'unitTestGenerator':
+            return [homeCrumb, { label: 'Unit Test Generator' }];
+        case 'uiDrafter':
+            return [homeCrumb, { label: 'UI Drafter' }];
+        case 'codeImprover':
+            return [homeCrumb, { label: 'AI Code Improver' }];
+        case 'educators':
+            return [homeCrumb, { label: 'Top Educators' }];
+
+        default:
+            return [];
+    }
+};
 
 
 const App: React.FC = () => {
@@ -44,28 +123,65 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const handleLoginSuccess = (loggedInUser: User) => {
+  // --- Memoized Navigation Handlers ---
+  const handleNavigate = useCallback((view: View) => {
+    setCurrentView(view);
+  }, []);
+
+  const handleLoginSuccess = useCallback((loggedInUser: User) => {
     setUser(loggedInUser);
-    setCurrentView({ name: 'home' });
-  };
+    handleNavigate({ name: 'home' });
+  }, [handleNavigate]);
   
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     logoutUser();
     setUser(null);
-    setCurrentView({ name: 'login' });
-  };
+    handleNavigate({ name: 'login' });
+  }, [handleNavigate]);
 
-  const handleNavigate = (view: View) => {
-    setCurrentView(view);
-  };
+  const handleSearch = useCallback((query: string) => {
+    handleNavigate({ name: 'search', query });
+  }, [handleNavigate]);
+
+  const handleBackToHome = useCallback(() => {
+    handleNavigate({ name: 'home' });
+  }, [handleNavigate]);
+
+  const handleNavigateToLogin = useCallback(() => {
+    handleNavigate({ name: 'login' });
+  }, [handleNavigate]);
+
+  const handleNavigateToSignup = useCallback(() => {
+    handleNavigate({ name: 'signup' });
+  }, [handleNavigate]);
+
+  const handleSelectLanguage = useCallback((language: Language) => {
+    handleNavigate({ name: 'language', language });
+  }, [handleNavigate]);
+
+  const handleSelectTopic = useCallback((language: Language, topic: Topic) => {
+    handleNavigate({ name: 'topic', language, topic });
+  }, [handleNavigate]);
+
+  const handleSelectTopicFromLanguagePage = useCallback((topic: Topic) => {
+    if (currentView.name === 'language') {
+      handleNavigate({ name: 'topic', language: currentView.language, topic });
+    }
+  }, [currentView, handleNavigate]);
+
+  const handleBackToLanguage = useCallback(() => {
+    if (currentView.name === 'topic') {
+      handleNavigate({ name: 'language', language: currentView.language });
+    }
+  }, [currentView, handleNavigate]);
   
   const renderContent = () => {
     if (!user) {
         switch (currentView.name) {
             case 'signup':
-                return <SignupPage onSignupSuccess={handleLoginSuccess} onNavigateToLogin={() => handleNavigate({ name: 'login' })} />;
+                return <SignupPage onSignupSuccess={handleLoginSuccess} onNavigateToLogin={handleNavigateToLogin} />;
             default:
-                return <LoginPage onLoginSuccess={handleLoginSuccess} onNavigateToSignup={() => handleNavigate({ name: 'signup' })} />;
+                return <LoginPage onLoginSuccess={handleLoginSuccess} onNavigateToSignup={handleNavigateToSignup} />;
         }
     }
     
@@ -73,47 +189,69 @@ const App: React.FC = () => {
       case 'home':
         return <HomePage 
             learningData={learningData} 
-            onSelectLanguage={(lang) => handleNavigate({ name: 'language', language: lang })} 
+            onSelectLanguage={handleSelectLanguage} 
+            onSelectTopic={handleSelectTopic}
             user={user} 
-            onNavigate={(viewName) => handleNavigate({ name: viewName as 'debugger' | 'learningPath' | 'interviewPrep' | 'apiGenerator' | 'liveTutor' })}
+            onNavigate={handleNavigate}
         />;
       case 'language':
-        return <LanguagePage language={currentView.language} onSelectTopic={(topic) => handleNavigate({ name: 'topic', language: currentView.language, topic: topic })} onBack={() => handleNavigate({ name: 'home' })} user={user} />;
+        return <LanguagePage language={currentView.language} onSelectTopic={handleSelectTopicFromLanguagePage} onBack={handleBackToHome} user={user} />;
       case 'topic':
-        return <TopicPage topic={currentView.topic} language={currentView.language} onBack={() => handleNavigate({ name: 'language', language: currentView.language })} user={user} onNavigate={handleNavigate} />;
+        return <TopicPage topic={currentView.topic} language={currentView.language} onBack={handleBackToLanguage} user={user} onNavigate={handleNavigate} />;
       case 'search':
-        return <SearchResultsPage query={currentView.query} onBack={() => handleNavigate({ name: 'home' })} />;
+        return <SearchResultsPage query={currentView.query} onBack={handleBackToHome} onNavigate={handleNavigate} />;
       case 'debugger':
-        return <CodeDebuggerPage onBack={() => handleNavigate({ name: 'home' })} />;
+        return <CodeDebuggerPage onBack={handleBackToHome} />;
       case 'learningPath':
-        return <LearningPathPage onBack={() => handleNavigate({ name: 'home' })} onNavigate={handleNavigate as any} />;
+        return <LearningPathPage onBack={handleBackToHome} onNavigate={handleNavigate as any} />;
       case 'interviewPrep':
-        return <InterviewPrepPage onBack={() => handleNavigate({ name: 'home' })} />;
+        return <InterviewPrepPage onBack={handleBackToHome} />;
       case 'apiGenerator':
         return <ApiGeneratorPage />;
       case 'liveTutor':
-        return <LiveTutorPage onBack={() => handleNavigate({ name: 'home' })} user={user} />;
+        return <LiveTutorPage onBack={handleBackToHome} user={user} />;
+      case 'codeTranslator':
+        return <CodeTranslatorPage onBack={handleBackToHome} />;
+      case 'quizGenerator':
+        return <QuizGeneratorPage onBack={handleBackToHome} />;
+      case 'codeMentor':
+        return <CodeMentorPage onBack={handleBackToHome} />;
+       case 'educators':
+        return <EducatorsPage onBack={handleBackToHome} />;
+      case 'playground':
+        return <CodePlaygroundPage onBack={handleBackToHome} />;
+      case 'unitTestGenerator':
+        return <UnitTestGeneratorPage onBack={handleBackToHome} />;
+      case 'uiDrafter':
+        return <UIDrafterPage onBack={handleBackToHome} />;
+      case 'codeImprover':
+        return <CodeImproverPage onBack={handleBackToHome} />;
       default:
         return <HomePage 
             learningData={learningData} 
-            onSelectLanguage={(lang) => handleNavigate({ name: 'language', language: lang })} 
+            onSelectLanguage={handleSelectLanguage} 
+            onSelectTopic={handleSelectTopic}
             user={user}
-            onNavigate={(viewName) => handleNavigate({ name: viewName as 'debugger' | 'learningPath' | 'interviewPrep' | 'apiGenerator' | 'liveTutor' })}
+            onNavigate={handleNavigate}
         />;
     }
   };
 
+  const breadcrumbs = generateBreadcrumbs(currentView);
 
   return (
-    <div className="min-h-screen font-sans flex flex-col bg-gray-950 text-slate-100">
-        <Header 
+    <div className="min-h-screen font-sans flex flex-col">
+        { user && <Header 
             user={user} 
             onLogout={handleLogout} 
-            onSearch={(query) => handleNavigate({ name: 'search', query })}
-            onNavigate={(viewName) => handleNavigate({ name: viewName as 'home' | 'debugger' | 'learningPath' | 'interviewPrep' | 'apiGenerator' | 'liveTutor' })}
-        />
-        <main className="flex-grow container mx-auto px-4 py-8">
-            {renderContent()}
+            onSearch={handleSearch}
+            onNavigate={handleNavigate}
+            breadcrumbs={breadcrumbs}
+        /> }
+        <main className="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col">
+            <Suspense fallback={<LoadingSpinner />}>
+              {renderContent()}
+            </Suspense>
         </main>
         {user && <Footer />}
     </div>

@@ -1,16 +1,61 @@
-// Types for StackTutor Learning Platform
+import { LiveSession } from "@google/genai";
+
+// --- User & Auth ---
 export interface User {
   username: string;
 }
 
-export interface ExternalLink {
+// --- UI & Theming ---
+export interface BreadcrumbItem {
+    label: string;
+    view?: View;
+}
+
+// --- Navigation ---
+export type View =
+  | { name: 'home' }
+  | { name: 'language'; language: Language }
+  | { name: 'topic'; language: Language; topic: Topic }
+  | { name: 'search'; query: string }
+  | { name: 'debugger' }
+  | { name: 'learningPath' }
+  | { name: 'interviewPrep' }
+  | { name: 'apiGenerator' }
+  | { name: 'liveTutor' }
+  | { name: 'codeTranslator' }
+  | { name: 'quizGenerator' }
+  | { name: 'codeMentor' }
+  | { name: 'playground' }
+  | { name: 'educators' }
+  | { name: 'unitTestGenerator' }
+  | { name: 'uiDrafter' }
+  | { name: 'codeImprover' }
+  | { name: 'login' }
+  | { name: 'signup' };
+
+// --- Learning Content ---
+export interface ResourceLink {
     name: string;
     url: string;
+    type: 'documentation' | 'article' | 'youtube' | 'github' | 'tutor' | 'educators';
+    description: string;
 }
+
+export interface Educator {
+    name: string;
+    description: string;
+    avatarUrl: string;
+    links: {
+        youtube?: string;
+        website?: string;
+        github?: string;
+    };
+}
+
 
 export interface TestCase {
     input: string;
-    expectedOutput: string;
+    expectedOutput: any;
 }
 
 export interface Exercise {
@@ -27,8 +72,9 @@ export interface Topic {
     description: string;
     longDescription: string;
     codeExample: string;
-    externalLinks: ExternalLink[];
+    externalLinks: { name: string; url: string }[];
     exercises?: Exercise[];
+    resources?: ResourceLink[];
 }
 
 export interface Language {
@@ -37,6 +83,7 @@ export interface Language {
     description: string;
     logo: string;
     topics: Topic[];
+    resources?: ResourceLink[];
 }
 
 export interface LearningCategory {
@@ -44,16 +91,32 @@ export interface LearningCategory {
     languages: Language[];
 }
 
-export interface Quiz {
-    questions: {
-        question: string;
-        options: string[];
-        correctAnswer: string;
-        explanation: string;
-    }[];
+// --- Tech Stack for API Generator ---
+export interface TechOption {
+    id: string;
+    name: string;
 }
 
-export interface PathStep {
+// FIX: Add language property to associate framework with a language
+export interface FrameworkOption extends TechOption {
+    language: string;
+}
+
+export interface DatabaseOption extends TechOption {}
+
+// --- Gemini Service & AI Features ---
+export interface QuizQuestion {
+    question: string;
+    options: string[];
+    correctAnswer: string;
+    explanation: string;
+}
+
+export interface Quiz {
+    questions: QuizQuestion[];
+}
+
+export interface LearningPathStep {
     languageSlug: string;
     languageName: string;
     topicSlug: string;
@@ -64,7 +127,7 @@ export interface PathStep {
 export interface LearningPath {
     title: string;
     description: string;
-    steps: PathStep[];
+    steps: LearningPathStep[];
 }
 
 export interface InterviewQuestion {
@@ -72,24 +135,15 @@ export interface InterviewQuestion {
     instructions: string;
 }
 
-
-// Types for API Forge
-export interface TechOption {
-  id: string;
-  name: string;
-}
-
-export interface FrameworkOption extends TechOption {
-  language: 'nodejs' | 'python' | 'php' | 'java';
-}
-
-export interface DatabaseOption extends TechOption {}
-
 export interface GenerationConfig {
-  language: string;
-  framework: string;
-  database: string;
-  prompt: string;
+    prompt: string;
+    language: string;
+    framework: string;
+    database: string;
+    generateTests: boolean;
+    testingFramework: string;
+    generateDocs: boolean;
+    addValidation: boolean;
 }
 
 export interface GeneratedCode {
@@ -97,14 +151,83 @@ export interface GeneratedCode {
     code: string;
 }
 
-export interface GenerationResult {
-    code: GeneratedCode[];
-    explanation: string;
-    docs: string;
-    deployment: string;
+// FIX: Add ApiGenerationHistoryItem to resolve import error in utils/history.ts
+export interface ApiGenerationHistoryItem {
+    id: string;
+    createdAt: string;
+    config: GenerationConfig;
 }
 
-export interface AiChatMessage {
-    role: 'user' | 'assistant';
-    content: string;
+export interface LiveTutorState {
+    status: 'disconnected' | 'connecting' | 'connected' | 'error';
+    transcript: Array<{ speaker: 'user' | 'ai', text: string }>;
+    session: LiveSession | null;
+    inputAudioContext: AudioContext | null;
+    outputAudioContext: AudioContext | null;
+    stream: MediaStream | null;
+    processor: ScriptProcessorNode | null;
+    source: MediaStreamAudioSourceNode | null;
+}
+
+// --- OpenAPI Specification Types for API Preview ---
+export interface OpenApiParameter {
+    name: string;
+    in: 'query' | 'header' | 'path' | 'cookie';
+    description: string;
+    required?: boolean;
+    schema: {
+        type: string;
+        format?: string;
+    };
+}
+
+export interface OpenApiResponse {
+    description: string;
+    content?: {
+        [mimeType: string]: {
+            schema: any;
+            example?: any;
+        };
+    };
+}
+
+export interface OpenApiOperation {
+    summary: string;
+    description?: string;
+    operationId?: string;
+    parameters?: OpenApiParameter[];
+    requestBody?: {
+        content: {
+            [mimeType: string]: {
+                schema: any;
+                example?: any;
+            };
+        };
+    };
+    responses: {
+        [statusCode: string]: OpenApiResponse;
+    };
+    tags?: string[];
+}
+
+export interface OpenApiPathItem {
+    get?: OpenApiOperation;
+    put?: OpenApiOperation;
+    post?: OpenApiOperation;
+    delete?: OpenApiOperation;
+    patch?: OpenApiOperation;
+}
+
+export interface OpenApiSpec {
+    openapi: string;
+    info: {
+        title: string;
+        version: string;
+    };
+    paths: {
+        [path: string]: OpenApiPathItem;
+    };
+    components?: {
+        schemas?: any;
+    };
 }

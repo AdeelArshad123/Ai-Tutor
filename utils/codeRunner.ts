@@ -21,10 +21,11 @@ const runJs = (userCode: string, testCase: TestCase): { output: string, passed: 
         const F = new Function(`
             let module = { exports: {} };
             ${userCode};
-            return module.exports.${testCase.input};
+            return module.exports;
         `);
         
-        const result = F();
+        const exports = F();
+        const result = exports[testCase.input];
         const output = JSON.stringify(result);
         const expected = JSON.stringify(testCase.expectedOutput);
 
@@ -43,7 +44,7 @@ const runHtml = (userCode: string, testCase: TestCase): { output: string, passed
         // This is a simplified way to "evaluate" the DOM state.
         const result = new Function('document', `return ${testCase.input}`)(doc);
         const output = String(result).trim();
-        const expected = testCase.expectedOutput.trim();
+        const expected = String(testCase.expectedOutput).trim();
         
         return { output, passed: output === expected };
 
@@ -78,8 +79,8 @@ export const runCode = (userCode: string, exercise: Exercise, language: string):
             passed: result.passed,
             input: testCase.input,
             output: result.output,
-
-            expected: testCase.expectedOutput,
+            // FIX: Ensure expected output is always a string to match the TestResult interface.
+            expected: typeof testCase.expectedOutput === 'string' ? testCase.expectedOutput : JSON.stringify(testCase.expectedOutput),
         };
     });
 };
