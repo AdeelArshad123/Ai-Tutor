@@ -59,6 +59,7 @@ function createBlob(data: Float32Array): Blob {
 
 const LiveTutorPage: React.FC<{ onBack: () => void; user: User; }> = ({ onBack, user }) => {
     const [status, setStatus] = useState<ConnectionStatus>('disconnected');
+    const [error, setError] = useState('');
     const [transcript, setTranscript] = useState<Array<{ speaker: 'user' | 'ai', text: string }>>([]);
     const sessionPromiseRef = useRef<Promise<LiveSession> | null>(null);
     const audioContextRefs = useRef<{
@@ -89,8 +90,15 @@ const LiveTutorPage: React.FC<{ onBack: () => void; user: User; }> = ({ onBack, 
 
     const handleConnect = async () => {
         if (status === 'connected' || status === 'connecting') return;
+        
+        if (!process.env.API_KEY) {
+            setError("API Key is not configured. Live tutor is unavailable.");
+            setStatus('error');
+            return;
+        }
 
         setStatus('connecting');
+        setError('');
         setTranscript([]);
         let currentInputTranscription = '';
         let currentOutputTranscription = '';
@@ -99,7 +107,7 @@ const LiveTutorPage: React.FC<{ onBack: () => void; user: User; }> = ({ onBack, 
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             audioContextRefs.current.stream = stream;
 
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             
             const inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
             audioContextRefs.current.input = inputAudioContext;
@@ -173,6 +181,7 @@ const LiveTutorPage: React.FC<{ onBack: () => void; user: User; }> = ({ onBack, 
                     },
                     onerror: (e: ErrorEvent) => {
                         console.error('Session error:', e);
+                        setError('A connection error occurred.');
                         setStatus('error');
                         handleDisconnect();
                     },
@@ -190,6 +199,7 @@ const LiveTutorPage: React.FC<{ onBack: () => void; user: User; }> = ({ onBack, 
 
         } catch (error) {
             console.error('Failed to start session:', error);
+            setError('Could not access microphone or start a session.');
             setStatus('error');
         }
     };
@@ -269,7 +279,7 @@ const LiveTutorPage: React.FC<{ onBack: () => void; user: User; }> = ({ onBack, 
                         </div>
                     ))}
                 </div>
-                {status === 'error' && <p className="text-red-500 dark:text-red-400 text-center mt-4">A connection error occurred. Please try starting a new session.</p>}
+                {status === 'error' && <p className="text-red-500 dark:text-red-400 text-center mt-4">{error || 'A connection error occurred. Please try starting a new session.'}</p>}
             </div>
         </div>
     );

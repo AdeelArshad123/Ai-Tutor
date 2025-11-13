@@ -11,6 +11,10 @@ export const ThemeContext = createContext<ThemeContextType | undefined>(undefine
 
 export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [theme, setTheme] = useState<Theme>(() => {
+    // Guard against SSR/build-time execution where window is not defined.
+    if (typeof window === 'undefined') {
+      return 'dark';
+    }
     try {
       const storedTheme = localStorage.getItem('stacktutor-theme');
       if (storedTheme && (storedTheme === 'light' || storedTheme === 'dark')) {
@@ -18,6 +22,7 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }
       return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     } catch (error) {
+        console.error("Could not access theme from localStorage", error);
         return 'dark';
     }
   });

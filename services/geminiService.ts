@@ -3,15 +3,32 @@ import { GenerationConfig, Quiz, LearningPath, InterviewQuestion, GeneratedCode 
 import { learningData } from '../constants';
 import MarkdownIt from 'markdown-it';
 
-if (!process.env.API_KEY) {
-    throw new Error("API_KEY environment variable is not set");
-}
+const getAiClient = (): GoogleGenAI | null => {
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+        console.error("API_KEY environment variable is not set. AI features will be disabled.");
+        return null;
+    }
+    return new GoogleGenAI({ apiKey });
+};
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 const textModel = 'gemini-2.5-flash';
 const proModel = 'gemini-2.5-pro';
 
 const md = new MarkdownIt();
+
+const handleMissingApiKeyError = (type: 'html' | 'json' | 'stream' | 'text') => {
+    const errorMessage = "AI features are unavailable because the API key is not configured. Please contact the site administrator.";
+    switch(type) {
+        case 'html':
+            return md.render(`## Error\n\n${errorMessage}`);
+        case 'json':
+        case 'stream':
+        case 'text':
+            throw new Error(errorMessage);
+    }
+}
+
 
 // Helper to convert File to base64
 const fileToBase64 = (file: File): Promise<string> => {
@@ -43,6 +60,9 @@ const parseJsonFromMarkdown = <T>(markdown: string): T | null => {
 // --- StackTutor Gemini Functions ---
 
 export const explainCode = async (code: string, language: string): Promise<string> => {
+    const ai = getAiClient();
+    if (!ai) return handleMissingApiKeyError('html');
+
     const prompt = `Explain the following ${language} code snippet. Break down what each part does in a clear, concise way for a beginner. Format the output as clean HTML markup.
 
 \`\`\`${language}
@@ -53,12 +73,18 @@ ${code}
 };
 
 export const simplifyTopic = async (topicDescription: string): Promise<string> => {
+    const ai = getAiClient();
+    if (!ai) return handleMissingApiKeyError('html');
+
     const prompt = `Explain this topic in simpler terms, like I'm a complete beginner. Use an analogy if it helps. Format the output as clean HTML markup.\n\nTopic: "${topicDescription}"`;
     const response = await ai.models.generateContent({ model: textModel, contents: prompt });
     return md.render(response.text);
 };
 
 export const generateQuiz = async (topicTitle: string, topicContent: string): Promise<Quiz> => {
+    const ai = getAiClient();
+    if (!ai) return handleMissingApiKeyError('json');
+
     const response = await ai.models.generateContent({
         model: textModel,
         contents: `Create a 3-question multiple-choice quiz about the following topic. For each question, provide 4 options, indicate the correct answer, and give a brief explanation for why it's correct.
@@ -97,6 +123,9 @@ Content: ${topicContent}`,
 };
 
 export const generateQuizFromTopicText = async (topicText: string): Promise<Quiz> => {
+    const ai = getAiClient();
+    if (!ai) return handleMissingApiKeyError('json');
+
     const response = await ai.models.generateContent({
         model: textModel,
         contents: `Create a 3-question multiple-choice quiz about the following topic. Be comprehensive based on the text provided. For each question, provide 4 options, indicate the correct answer, and give a brief explanation for why it's correct.
@@ -135,6 +164,9 @@ ${topicText}`,
 };
 
 export const reviewCode = async (code: string, language: string, exerciseDescription: string): Promise<string> => {
+    const ai = getAiClient();
+    if (!ai) return handleMissingApiKeyError('html');
+
     const prompt = `As a senior software engineer, review the following ${language} code solution for the exercise described. Provide feedback on correctness, efficiency, code style, and best practices. Suggest improvements or a refactored version if applicable. Format the output as clean HTML markup.
 
 Exercise: "${exerciseDescription}"
@@ -148,6 +180,9 @@ ${code}
 };
 
 export const generateProjectIdea = async (language: string, topics: string[]): Promise<string> => {
+    const ai = getAiClient();
+    if (!ai) return handleMissingApiKeyError('html');
+
     const prompt = `Suggest a small, beginner-friendly project idea using ${language} that incorporates the following topics: ${topics.join(', ')}. Describe the project, its core features, and why it's a good way to practice these skills. Format the output as clean HTML markup.`;
     const response = await ai.models.generateContent({ model: textModel, contents: prompt });
     return md.render(response.text);
@@ -155,6 +190,9 @@ export const generateProjectIdea = async (language: string, topics: string[]): P
 
 
 export const searchTopics = async (query: string): Promise<string> => {
+    const ai = getAiClient();
+    if (!ai) return handleMissingApiKeyError('html');
+
     const allTopics = learningData.flatMap(category =>
         category.languages.flatMap(lang =>
             lang.topics.map(topic => ({
@@ -180,6 +218,9 @@ Your response should be a friendly summary of the best results, including the HT
 };
 
 export const debugCode = async (code: string, language: string): Promise<string> => {
+    const ai = getAiClient();
+    if (!ai) return handleMissingApiKeyError('html');
+
     const prompt = `I have a bug in my ${language} code. Please analyze it, identify the error, explain what's wrong, and provide the corrected code. Format the output as clean HTML, using <pre><code> for code blocks.
 
 Buggy Code:
@@ -191,6 +232,9 @@ ${code}
 };
 
 export const generateLearningPath = async (goal: string): Promise<LearningPath | null> => {
+    const ai = getAiClient();
+    if (!ai) return handleMissingApiKeyError('json');
+
     const allTopics = learningData.flatMap(category =>
         category.languages.map(lang => ({
             languageName: lang.name,
@@ -235,6 +279,9 @@ You must create a step-by-step path. For each step, you must specify the 'langua
 };
 
 export const getInterviewQuestion = async (technology: string): Promise<InterviewQuestion | null> => {
+     const ai = getAiClient();
+     if (!ai) return handleMissingApiKeyError('json');
+
      const response = await ai.models.generateContent({
         model: textModel,
         contents: `Generate a beginner-to-intermediate level technical interview question for a developer specializing in ${technology}. The question should be a practical coding problem. Provide a clear 'question' title and 'instructions' on what needs to be implemented.`,
@@ -254,6 +301,9 @@ export const getInterviewQuestion = async (technology: string): Promise<Intervie
 };
 
 export const evaluateInterviewAttempt = async (question: string, userCode: string, userExplanation: string): Promise<string> => {
+    const ai = getAiClient();
+    if (!ai) return handleMissingApiKeyError('html');
+
     const prompt = `Act as a senior technical interviewer. Evaluate the candidate's submission for the following question. Provide constructive feedback on the code's correctness, efficiency, and clarity, as well as the quality of their explanation. Format the output as clean HTML.
 
 Question: "${question}"
@@ -270,6 +320,9 @@ Candidate's Explanation:
 };
 
 export const translateCode = async (sourceCode: string, sourceLanguage: string, targetLanguage: string): Promise<string> => {
+    const ai = getAiClient();
+    if (!ai) return handleMissingApiKeyError('text');
+
     const prompt = `Translate the following code snippet from ${sourceLanguage} to ${targetLanguage}.
 Provide *only* the raw translated code, without any surrounding text, explanations, or markdown fences like \`\`\`.
 
@@ -283,6 +336,9 @@ ${sourceCode}
 };
 
 export const generateUnitTests = async (sourceCode: string, language: string, framework: string): Promise<string> => {
+    const ai = getAiClient();
+    if (!ai) return handleMissingApiKeyError('text');
+
     const prompt = `You are an expert software engineer specializing in Test-Driven Development (TDD).
 Your task is to write a comprehensive suite of unit tests for the following ${language} code using the ${framework} testing framework.
 
@@ -306,6 +362,9 @@ ${sourceCode}
 };
 
 export const improveCode = async (code: string, language: string): Promise<{ improvedCode: string; explanation: string; }> => {
+    const ai = getAiClient();
+    if (!ai) return handleMissingApiKeyError('json');
+
     const prompt = `As an expert software engineer, review the following ${language} code. Refactor it to improve its quality by addressing the following aspects:
 - Readability and clarity
 - Performance and efficiency
@@ -349,6 +408,9 @@ ${code}
 // --- API Forge Gemini Functions ---
 
 export const generateApiStream = (config: GenerationConfig) => {
+    const ai = getAiClient();
+    if (!ai) return handleMissingApiKeyError('stream');
+
     const systemInstruction = `You are an expert software architect. Your task is to generate a complete backend API based on a user's prompt and tech stack selection. Generate all necessary files, including package definitions, server entry points, routes, controllers, and models. The code should be well-structured and idiomatic for the chosen language and framework.
 
 You MUST structure your response as a single, continuous stream. Use the following special markers to delineate each file. Do NOT nest these markers.
@@ -389,6 +451,9 @@ Please generate all necessary files. The response must only contain code blocks 
 // --- Code Mentor Gemini Functions ---
 
 export const generateCodingChallenge = async (language: string, concept: string): Promise<string> => {
+    const ai = getAiClient();
+    if (!ai) return handleMissingApiKeyError('text');
+
     const prompt = `Generate a very simple, beginner-friendly coding challenge about "${concept}" in the ${language} programming language. 
     The challenge should be a single paragraph. Do not include any starter code or solution. Just provide the problem description.`;
     const response = await ai.models.generateContent({ model: textModel, contents: prompt });
@@ -396,6 +461,9 @@ export const generateCodingChallenge = async (language: string, concept: string)
 };
 
 export const getCodeHint = async (challenge: string, userCode: string, language: string): Promise<string> => {
+    const ai = getAiClient();
+    if (!ai) return handleMissingApiKeyError('text');
+
     const prompt = `A beginner programmer is working on the following challenge in ${language}:
 Challenge: "${challenge}"
 
@@ -410,6 +478,9 @@ They are stuck and need a hint. Provide a small, helpful hint to guide them in t
 };
 
 export const evaluateSolution = async (challenge: string, userCode: string, language: string): Promise<string> => {
+    const ai = getAiClient();
+    if (!ai) return handleMissingApiKeyError('html');
+    
     const prompt = `As a friendly and encouraging code mentor, evaluate a beginner's solution for a coding challenge.
 Challenge: "${challenge}"
 
@@ -427,6 +498,9 @@ Provide feedback in three parts, formatted as clean HTML markup:
 };
 
 export const getPracticeFeedback = async (code: string, language: string, executionError: string): Promise<string> => {
+    const ai = getAiClient();
+    if (!ai) return handleMissingApiKeyError('html');
+
     const prompt = `You are an expert and friendly code mentor. A user is practicing their ${language} skills in a code playground.
 Analyze their code.
 
@@ -447,6 +521,9 @@ Provide feedback formatted as clean HTML markup. Use <pre><code> for any code bl
 };
 
 export const generateUiFromImage = async (file: File, prompt: string): Promise<string> => {
+    const ai = getAiClient();
+    if (!ai) return handleMissingApiKeyError('text');
+    
     const base64Image = await fileToBase64(file);
     const imagePart = {
         inlineData: {
